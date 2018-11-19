@@ -6,7 +6,9 @@ from torch.autograd import Variable
 from time import time
 
 use_cuda = torch.cuda.is_available()
+use_cuda = False
 device = torch.device("cuda" if use_cuda else "cpu")
+print('Using device "{}".'.format(device))
 FloatTensor = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
 LongTensor = torch.cuda.LongTensor if use_cuda else torch.LongTensor
 
