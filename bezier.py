@@ -14,6 +14,7 @@ args = parser.parse_args()
 
 use_cuda = args.cuda and torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
+print('Using device "{}".'.format(device))
 FloatTensor = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
 LongTensor = torch.cuda.LongTensor if use_cuda else torch.LongTensor
 
