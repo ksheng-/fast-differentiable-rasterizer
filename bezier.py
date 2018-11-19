@@ -6,16 +6,17 @@ from torch.autograd import Variable
 from time import time
 
 class Bezier(torch.nn.Module):
-    def __init__(self, res=512):
+    def __init__(self, res=512, steps=100):
         super(Bezier, self).__init__()
         self.res = res
+        self.steps = steps
 
         C, D = np.meshgrid(range(self.res), range(self.res))
         C_e = C[np.newaxis, :, :]
         D_e = D[np.newaxis, :, :]
         
-        c = Variable(torch.Tensor(C_e / res)).expand(100, 512, 512)
-        d = Variable(torch.Tensor(D_e / res)).expand(100, 512, 512)
+        c = Variable(torch.Tensor(C_e / res)).expand(self.steps, self.res, self.res)
+        d = Variable(torch.Tensor(D_e / res)).expand(self.steps, self.res, self.res)
 
         self.c = torch.transpose(c, 0, 2)
         self.d = torch.transpose(d, 0, 2)        
@@ -38,22 +39,41 @@ class Bezier(torch.nn.Module):
         raster = np.zeros((self.res, self.res))
         x = curve[0]
         y = curve[1]
-        x_ = x.expand(self.res, self.res, 100)
-        y_ = y.expand(self.res, self.res, 100)
+        xmax, ymax = [(self.res * i.max()).floor().int().item() for i in (x, y)]
+        xmin, ymin = [(self.res * i.min()).floor().int().item() for i in (x, y)]
+        print(xmin, ymin, xmax, ymax)
+        w = xmax-xmin
+        h = ymax-ymin
+        print(w, h)
+        x_ = x.expand(w, h, self.steps)
+        y_ = y.expand(w, h, self.steps)
+        #  x_ = x.expand(self.res, self.res, self.steps)
+        #  y_ = y.expand(self.res, self.res, self.steps)
         tic = time()
-        raster = torch.exp(-(x_ - self.c)**2 / 2e-4 - (y_ - self.d) ** 2 / 2e-4)
-        raster = torch.mean(raster, dim=2)
+        # this is the slow part
+        c = self.c[xmin:xmax, ymin:ymax]
+        d = self.d[xmin:xmax, ymin:ymax]
+        # raster_ = (x_ - c)**2 + (y_ - d) ** 2 < 1e-3
+        # print(np.amax(raster_))
+        # raster_ = torch.max(raster_, dim=2)[0]
+        raster_ = torch.exp(-(x_ - c)**2 / 2e-5 - (y_ - d) ** 2 / 2e-5)
+        raster_ = torch.mean(raster_, dim=2)
+        raster = torch.zeros([self.res, self.res], dtype=torch.float)
+        raster[xmin:xmax, ymin:ymax] = raster_
+        print(x_)
+        print(self.c)
+        print(y_)
+        print(self.d)
+        print(raster)
         print(time() - tic)
         
-
         return torch.squeeze(raster)
       
     def forward(self, control_points):
-        n_steps = 100
-        a = self.lin_interp(control_points[0], control_points[1], n_steps)
-        b = self.lin_interp(control_points[1], control_points[2], n_steps)
-        steps = Variable(torch.arange(0, n_steps).expand(2, n_steps))
-        curve = a + (steps.float() / float(n_steps)) * (b - a)
+        a = self.lin_interp(control_points[0], control_points[1], self.steps)
+        b = self.lin_interp(control_points[1], control_points[2], self.steps)
+        steps = Variable(torch.arange(0, self.steps).expand(2, self.steps))
+        curve = a + (steps.float() / float(self.steps)) * (b - a)
 
         return self.raster(curve)
 
