@@ -5,6 +5,11 @@ import numpy as np
 from torch.autograd import Variable
 from time import time
 
+use_cuda = torch.cuda.is_available()
+device = torch.device("cuda" if use_cuda else "cpu")
+FloatTensor = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
+LongTensor = torch.cuda.LongTensor if use_cuda else torch.LongTensor
+
 class Bezier(torch.nn.Module):
     def __init__(self, res=512, steps=100):
         super(Bezier, self).__init__()
@@ -35,36 +40,70 @@ class Bezier(torch.nn.Module):
         
           return torch.stack([interp1, interp2])
 
-    def raster(self, curve, sigma=1e-2):
+    def raster(self, curve, sigma=1e-2, n=None):
         raster = np.zeros((self.res, self.res))
         x = curve[0]
         y = curve[1]
-        xmax, ymax = [(self.res * (i.max() + 3*sigma)).ceil().int().item() for i in (x, y)]
-        xmin, ymin = [(self.res * (i.min() - 3*sigma)).floor().int().item() for i in (x, y)]
-        print(xmin, ymin, xmax, ymax)
-        w = xmax-xmin
-        h = ymax-ymin
-        print(w, h)
-        x_ = x.expand(w, h, self.steps)
-        y_ = y.expand(w, h, self.steps)
-        #  x_ = x.expand(self.res, self.res, self.steps)
-        #  y_ = y.expand(self.res, self.res, self.steps)
+        
         tic = time()
-        # this is the slow part
-        c = self.c[xmin:xmax, ymin:ymax]
-        d = self.d[xmin:xmax, ymin:ymax]
-        # raster_ = (x_ - c)**2 + (y_ - d) ** 2 < 1e-3
-        # print(np.amax(raster_))
-        # raster_ = torch.max(raster_, dim=2)[0]
-        raster_ = torch.exp((-(x_ - c)**2 - (y_ - d) ** 2) / (2*sigma**2))
-        raster_ = torch.mean(raster_, dim=2)
-        raster = torch.zeros([self.res, self.res], dtype=torch.float)
-        raster[xmin:xmax, ymin:ymax] = raster_
-        print(x_)
-        print(self.c)
-        print(y_)
-        print(self.d)
-        print(raster)
+        
+        spread = 2 * sigma
+        # nextpow2 above 2 standard deviations in both x and y
+        w = 2*int(2**np.ceil(np.log2(self.res*spread)))
+        w = 32
+        print(w)
+        # lower left corner of a w*w block centered on each point of the curve
+        blocks = torch.clamp((self.res * curve).floor().int() - w // 2, 0,  self.res - w)
+
+        #  blocks = []
+        #  mask = torch.zeros([self.res, self.res]).byte()
+        #  # non overlapping blocks instead
+        #  for point in torch.t(curve):
+            #  x, y = torch.clamp((self.res * point).floor().int() - w // 2, 0,  self.res - w)
+            
+            #  mask[x:x+w, y:y+w] = 1
+            #  blocks.append([x, y])
+        
+        # chunked
+        # xmax, ymax = (self.res * (curve + spread)).ceil().int()
+        # xlim = torch.stack([xmin, xmax], 1)
+        # ylim = torch.stack([ymin, ymax], 1)
+        # print(x.size())
+        #  for point in torch.t(curve)[::]:
+            #  xmax, ymax = (self.res * (point + spread)).ceil().int().tolist()
+            #  xmin, ymin = (self.res * (point - spread)).floor().int().tolist()
+            #  chunks.append([xmin, xmax, ymin, ymax])
+        #  xmax, ymax = [(self.res * (i.max() + 3*sigma)).ceil().int().item() for i in (x, y)]
+        #  xmin, ymin = [(self.res * (i.min() - 3*sigma)).floor().int().item() for i in (x, y)]
+        
+        
+
+        c = torch.stack([self.c[x:x+w, y:y+w, t] for t, (x, y) in enumerate(torch.t(blocks))], dim=2)
+        d = torch.stack([self.d[x:x+w, y:y+w, t] for t, (x, y) in enumerate(torch.t(blocks))], dim=2)
+        print(time() - tic)
+        x_ = x.expand(w, w, self.steps)
+        y_ = y.expand(w, w, self.steps)
+        raster = torch.zeros([self.res, self.res, self.steps])
+        raster_ = torch.exp((-(x_ - c)**2 - (y_ - d)**2) / (2*sigma**2))
+        print(time() - tic)
+        for t, (x, y) in enumerate(torch.t(blocks)):
+            raster[x:x+w, y:y+w, t] = raster_[:,:,t]
+        raster = torch.mean(raster, dim=2)
+        
+        #  for xmin, xmax, ymin, ymax in segments:
+            #  w = xmax-xmin
+            #  h = ymax-ymin
+            #  print(w, h)
+            #  x_ = x.expand(w, h, self.steps)
+            #  y_ = y.expand(w, h, self.steps)
+            #  #  x_ = x.expand(self.res, self.res, self.steps)
+            #  #  y_ = y.expand(self.res, self.res, self.steps)
+            #  # this is the slow part
+            #  c = self.c[xmin:xmax, ymin:ymax]
+            #  d = self.d[xmin:xmax, ymin:ymax]
+            #  raster_ = torch.exp((-(x_ - c)**2 - (y_ - d) ** 2) / (2*sigma**2))
+            #  raster_ = torch.mean(raster_, dim=2)
+            #  raster[xmin:xmax, ymin:ymax] = raster_
         print(time() - tic)
         
         return torch.squeeze(raster)
@@ -85,7 +124,7 @@ control_points_l = [
     [0.5, 0.9]
     ]
 
-control_points_t = Variable(torch.Tensor(np.array(control_points_l)), requires_grad=True)
+control_points_t = Variable(torch.Tensor(np.array(control_points_l), device=device), requires_grad=True)
 
 tic = time()
 curve = net.forward(control_points_t)
