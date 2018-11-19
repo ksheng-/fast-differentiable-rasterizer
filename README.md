@@ -1,5 +1,8 @@
 # fast-differentiable-rasterizer
 
+### Resources
+http://developer.download.nvidia.com/devzone/devcenter/gamegraphics/files/opengl/gpupathrender.pdf
+
 ### Preliminary performance testing
 
 ##### Machine specs
