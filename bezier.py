@@ -1,11 +1,18 @@
 #!/bin/python3
 
+import argparse
 import torch
 import numpy as np
 from torch.autograd import Variable
 from time import time
 
-use_cuda = torch.cuda.is_available()
+parser = argparse.ArgumentParser()
+parser.add_argument('--cuda', action='store_true', help='')
+parser.add_argument('--display', action='store_true', help='')
+
+args = parser.parse_args()
+
+use_cuda = args.cuda and torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
 FloatTensor = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
 LongTensor = torch.cuda.LongTensor if use_cuda else torch.LongTensor
@@ -136,7 +143,7 @@ loss.backward()
 
 curve_ = curve.data.numpy()
 
-import matplotlib.pyplot as plt
-plt.matshow(curve_)
-
-plt.show()
+if args.display:
+    import matplotlib.pyplot as plt
+    plt.matshow(curve_)
+    plt.show()
