@@ -35,12 +35,12 @@ class Bezier(torch.nn.Module):
         
           return torch.stack([interp1, interp2])
 
-    def raster(self, curve):
+    def raster(self, curve, sigma=1e-2):
         raster = np.zeros((self.res, self.res))
         x = curve[0]
         y = curve[1]
-        xmax, ymax = [(self.res * i.max()).floor().int().item() for i in (x, y)]
-        xmin, ymin = [(self.res * i.min()).floor().int().item() for i in (x, y)]
+        xmax, ymax = [(self.res * (i.max() + 3*sigma)).ceil().int().item() for i in (x, y)]
+        xmin, ymin = [(self.res * (i.min() - 3*sigma)).floor().int().item() for i in (x, y)]
         print(xmin, ymin, xmax, ymax)
         w = xmax-xmin
         h = ymax-ymin
@@ -56,7 +56,7 @@ class Bezier(torch.nn.Module):
         # raster_ = (x_ - c)**2 + (y_ - d) ** 2 < 1e-3
         # print(np.amax(raster_))
         # raster_ = torch.max(raster_, dim=2)[0]
-        raster_ = torch.exp(-(x_ - c)**2 / 2e-5 - (y_ - d) ** 2 / 2e-5)
+        raster_ = torch.exp((-(x_ - c)**2 - (y_ - d) ** 2) / (2*sigma**2))
         raster_ = torch.mean(raster_, dim=2)
         raster = torch.zeros([self.res, self.res], dtype=torch.float)
         raster[xmin:xmax, ymin:ymax] = raster_
