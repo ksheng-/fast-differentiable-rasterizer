@@ -57,9 +57,9 @@ class Bezier(torch.nn.Module):
         
         spread = 2 * sigma
         # nextpow2 above 2 standard deviations in both x and y
-        w = 2*int(2**np.ceil(np.log2(self.res*spread)))
+ #       w = 2*int(2**np.ceil(np.log2(self.res*spread)))
         w = 32
-        print(w)
+#        print(w)
         # lower left corner of a w*w block centered on each point of the curve
         blocks = torch.clamp((self.res * curve).floor().int() - w // 2, 0,  self.res - w)
 
@@ -88,12 +88,12 @@ class Bezier(torch.nn.Module):
 
         c = torch.stack([self.c[x:x+w, y:y+w, t] for t, (x, y) in enumerate(torch.t(blocks))], dim=2)
         d = torch.stack([self.d[x:x+w, y:y+w, t] for t, (x, y) in enumerate(torch.t(blocks))], dim=2)
-        print(time() - tic)
+        #print(time() - tic)
         x_ = x.expand(w, w, self.steps)
         y_ = y.expand(w, w, self.steps)
         raster = torch.zeros([self.res, self.res, self.steps])
         raster_ = torch.exp((-(x_ - c)**2 - (y_ - d)**2) / (2*sigma**2))
-        print(time() - tic)
+        #print(time() - tic)
         for t, (x, y) in enumerate(torch.t(blocks)):
             raster[x:x+w, y:y+w, t] = raster_[:,:,t]
         raster = torch.mean(raster, dim=2)
@@ -112,7 +112,7 @@ class Bezier(torch.nn.Module):
             #  raster_ = torch.exp((-(x_ - c)**2 - (y_ - d) ** 2) / (2*sigma**2))
             #  raster_ = torch.mean(raster_, dim=2)
             #  raster[xmin:xmax, ymin:ymax] = raster_
-        print(time() - tic)
+        #print(time() - tic)
         
         return torch.squeeze(raster)
       
@@ -129,6 +129,7 @@ net = Bezier()
 control_points_l = [
     [0.1, 0.1],
     [0.9, 0.9],
+    [0.1, 0.4],
     [0.5, 0.9]
     ]
 
