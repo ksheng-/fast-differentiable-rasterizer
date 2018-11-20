@@ -13,3 +13,6 @@ GCP n1-standard-8 VM : 2.2 GHz 8 vCPU Broadwell E5, 30GB RAM, Tesla V100
 |----------|--------:|---------:|
 |naive     |0.965s   |0.405s    |
 
+##### Machine specs 2
+Desktop: 3.5 GHz AMD FX(tm)-6300 Six-Core Processor, 10GB RAM, 
+
