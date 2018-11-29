@@ -6,18 +6,6 @@ import numpy as np
 from torch.autograd import Variable
 from time import time
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--cuda', action='store_true', help='')
-parser.add_argument('--display', action='store_true', help='')
-
-args = parser.parse_args()
-
-use_cuda = args.cuda and torch.cuda.is_available()
-device = torch.device("cuda" if use_cuda else "cpu")
-print('Using device "{}".'.format(device))
-FloatTensor = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
-LongTensor = torch.cuda.LongTensor if use_cuda else torch.LongTensor
-
 class Bezier(torch.nn.Module):
     def __init__(self, res=512, steps=100):
         super(Bezier, self).__init__()
@@ -33,6 +21,8 @@ class Bezier(torch.nn.Module):
 
         self.c = torch.transpose(c, 0, 2)
         self.d = torch.transpose(d, 0, 2)        
+        if use_cuda:
+            torch.cuda.synchronize()
         
     @staticmethod
     def lin_interp(point1, point2, num_steps):
@@ -48,17 +38,93 @@ class Bezier(torch.nn.Module):
         
           return torch.stack([interp1, interp2])
 
-    def raster(self, curve, sigma=1e-2, n=None):
+    def raster(self, curve, sigma=1e-2):
+        return self._raster_shrunk(curve, sigma)
+
+    def forward(self, control_points):
+        a = self.lin_interp(control_points[0], control_points[1], self.steps)
+        b = self.lin_interp(control_points[1], control_points[2], self.steps)
+        steps = Variable(torch.arange(0, self.steps).expand(2, self.steps))
+        curve = a + (steps.float() / float(self.steps)) * (b - a)
+
+        return self.raster(curve)
+    
+    def _raster_base(self, curve, sigma=1e-2):
+        x = curve[0]
+        y = curve[1]
+        x_ = x.expand(self.res, self.res, 100)
+        y_ = y.expand(self.res, self.res, 100)
+        tic = time()
+        raster = torch.exp(-(x_ - self.c)**2 / 2e-4 - (y_ - self.d) ** 2 / 2e-4)
+        raster = torch.mean(raster, dim=2)
+        print(time() - tic)
+        
+        return torch.squeeze(raster)
+    
+    def _raster_sparse(self, curve, sigma=1e-2):
         raster = np.zeros((self.res, self.res))
         x = curve[0]
         y = curve[1]
         
         tic = time()
         
+        return torch.squeeze(raster)
+
+    def _raster_wu(self, curve, sigma=1e-2):
+        x = curve[0]
+        y = curve[1]
+
+        tic = time()
+        
         spread = 2 * sigma
         # nextpow2 above 2 standard deviations in both x and y
         w = 2*int(2**np.ceil(np.log2(self.res*spread)))
-        w = 32
+        print(w)
+        
+        raster = torch.zeros([self.res, self.res])
+        # raster_ = torch.exp((-(x_ - c)**2 - (y_ - d)**2) / (2*sigma**2))
+        # raster_ = (x_ - c)**2 + (y_ - d)**2
+        for (x, y) in enumerate((self.res * curve).long().t()):
+            print(x, y)
+            raster[x, y] = 1
+        
+        print('{}: Rasterized.'.format(time() - tic))
+        
+        return torch.squeeze(raster)
+    
+    def _raster_smear(self, curve, sigma=1e-2):
+        x = curve[0]
+        y = curve[1]
+
+        tic = time()
+        
+        spread = 2 * sigma
+        # nextpow2 above 2 standard deviations in both x and y
+        w = 2*int(2**np.ceil(np.log2(self.res*spread)))
+        print(w)
+        
+        raster = torch.zeros([self.res, self.res])
+        # raster_ = torch.exp((-(x_ - c)**2 - (y_ - d)**2) / (2*sigma**2))
+        # raster_ = (x_ - c)**2 + (y_ - d)**2
+        for (x, y) in enumerate((self.res * curve).long().t()):
+            print(x, y)
+            raster[x, y] = 1
+        
+        print('{}: Rasterized.'.format(time() - tic))
+        
+        return torch.squeeze(raster)
+
+    def _raster_shrunk(self, curve, sigma=1e-4):
+        x = curve[0]
+        y = curve[1]
+        
+        # torch.cuda.synchronize()
+
+        tic = time()
+        
+        spread = 2 * sigma
+        # nextpow2 above 2 standard deviations in both x and y
+        w = 2*int(2**np.ceil(np.log2(self.res*spread)))
         print(w)
         # lower left corner of a w*w block centered on each point of the curve
         blocks = torch.clamp((self.res * curve).floor().int() - w // 2, 0,  self.res - w)
@@ -85,18 +151,29 @@ class Bezier(torch.nn.Module):
         #  xmin, ymin = [(self.res * (i.min() - 3*sigma)).floor().int().item() for i in (x, y)]
         
         
+        # w * w * self.steps
+        c = torch.zeros([w, w, self.steps], requires_grad=False)
+        d = torch.zeros([w, w, self.steps], requires_grad=False)
+        for t, (px, py) in enumerate(torch.t(blocks)):
+            c[:,:,t] = self.c[px:px+w, py:py+w, t]
+            d[:,:,t] = self.d[px:px+w, py:py+w, t]
+        #  c = torch.stack([self.c[x:x+w, y:y+w, t] for t, (x, y) in enumerate(torch.t(blocks))], dim=2)
+        #  d = torch.stack([self.d[x:x+w, y:y+w, t] for t, (x, y) in enumerate(torch.t(blocks))], dim=2)
 
-        c = torch.stack([self.c[x:x+w, y:y+w, t] for t, (x, y) in enumerate(torch.t(blocks))], dim=2)
-        d = torch.stack([self.d[x:x+w, y:y+w, t] for t, (x, y) in enumerate(torch.t(blocks))], dim=2)
-        print(time() - tic)
+        print('{}: Bounding rectangles found.'.format(time() - tic))
         x_ = x.expand(w, w, self.steps)
         y_ = y.expand(w, w, self.steps)
-        raster = torch.zeros([self.res, self.res, self.steps])
+        print('{}: Dims expanded.'.format(time() - tic))
         raster_ = torch.exp((-(x_ - c)**2 - (y_ - d)**2) / (2*sigma**2))
-        print(time() - tic)
+        # raster_ = (x_ - c)**2 + (y_ - d)**2
+        print('{}: Gradient generated.'.format(time() - tic))
+        #  idx = torch.LongTensor
+        #  self.r.scatter_(2, raster_)
+        raster = torch.zeros([self.res, self.res], requires_grad=False)
+        print('{}: Gradient generated.'.format(time() - tic))
         for t, (x, y) in enumerate(torch.t(blocks)):
-            raster[x:x+w, y:y+w, t] = raster_[:,:,t]
-        raster = torch.mean(raster, dim=2)
+            raster[x:x+w, y:y+w] += raster_[:,:,t]
+        # raster = torch.mean(self.r, dim=2)
         
         #  for xmin, xmax, ymin, ymax in segments:
             #  w = xmax-xmin
@@ -112,17 +189,22 @@ class Bezier(torch.nn.Module):
             #  raster_ = torch.exp((-(x_ - c)**2 - (y_ - d) ** 2) / (2*sigma**2))
             #  raster_ = torch.mean(raster_, dim=2)
             #  raster[xmin:xmax, ymin:ymax] = raster_
-        print(time() - tic)
+        print('{}: Rasterized.'.format(time() - tic))
         
         return torch.squeeze(raster)
-      
-    def forward(self, control_points):
-        a = self.lin_interp(control_points[0], control_points[1], self.steps)
-        b = self.lin_interp(control_points[1], control_points[2], self.steps)
-        steps = Variable(torch.arange(0, self.steps).expand(2, self.steps))
-        curve = a + (steps.float() / float(self.steps)) * (b - a)
 
-        return self.raster(curve)
+parser = argparse.ArgumentParser()
+parser.add_argument('--cuda', action='store_true', help='')
+parser.add_argument('--display', action='store_true', help='')
+parser.add_argument('--steps', default=1, type=int, help='')
+
+args = parser.parse_args()
+
+use_cuda = args.cuda and torch.cuda.is_available()
+device = torch.device("cuda" if use_cuda else "cpu")
+print('Using device "{}"'.format(device))
+FloatTensor = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
+LongTensor = torch.cuda.LongTensor if use_cuda else torch.LongTensor
 
 net = Bezier()
 
@@ -135,12 +217,22 @@ control_points_l = [
 control_points_t = Variable(torch.Tensor(np.array(control_points_l), device=device), requires_grad=True)
 
 tic = time()
-curve = net.forward(control_points_t)
-print(time() - tic)
 
-crit = torch.nn.L1Loss()
-loss = crit(curve, Variable(torch.Tensor(curve.data)))
-loss.backward()
+steps = args.steps
+for i in range(steps):
+    curve = net.forward(control_points_t)
+    print('{}: Total.'.format(time() - tic))
+
+    crit = torch.nn.L1Loss()
+    loss = crit(curve, Variable(torch.Tensor(curve.data)))
+    print('{}: Loss.'.format(time() - tic))
+    loss.backward()
+
+    print('{}: Backwards.'.format(time() - tic))
+
+elapsed = time() - tic
+print('Completed {} passes in {} seconds ({} iter/s, {} ms/iter).'
+        .format(steps, elapsed, steps/elapsed, elapsed/steps * 1e3))
 
 curve_ = curve.data.numpy()
 
