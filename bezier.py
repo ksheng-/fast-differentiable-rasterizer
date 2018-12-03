@@ -61,59 +61,6 @@ class Bezier(torch.nn.Module):
             print(time() - tic)
         
         return torch.squeeze(raster)
-    
-    def _raster_sparse(self, curve, sigma=1e-3):
-        raster = np.zeros((self.res, self.res))
-        x = curve[0]
-        y = curve[1]
-        
-        tic = time()
-        
-        return torch.squeeze(raster)
-
-    def _raster_wu(self, curve, sigma=1e-2):
-        x = curve[0]
-        y = curve[1]
-
-        tic = time()
-        
-        spread = 2 * sigma
-        # nextpow2 above 2 standard deviations in both x and y
-        w = 2*int(2**np.ceil(np.log2(self.res*spread)))
-        print(w)
-        
-        raster = torch.zeros([self.res, self.res])
-        # raster_ = torch.exp((-(x_ - c)**2 - (y_ - d)**2) / (2*sigma**2))
-        # raster_ = (x_ - c)**2 + (y_ - d)**2
-        for (x, y) in enumerate((self.res * curve).long().t()):
-            print(x, y)
-            raster[x, y] = 1
-        
-        print('{}: Rasterized.'.format(time() - tic))
-        
-        return torch.squeeze(raster)
-    
-    def _raster_smear(self, curve, sigma=1e-2):
-        x = curve[0]
-        y = curve[1]
-
-        tic = time()
-        
-        spread = 2 * sigma
-        # nextpow2 above 2 standard deviations in both x and y
-        w = 2*int(2**np.ceil(np.log2(self.res*spread)))
-        print(w)
-        
-        raster = torch.zeros([self.res, self.res])
-        # raster_ = torch.exp((-(x_ - c)**2 - (y_ - d)**2) / (2*sigma**2))
-        # raster_ = (x_ - c)**2 + (y_ - d)**2
-        for (x, y) in enumerate((self.res * curve).long().t()):
-            print(x, y)
-            raster[x, y] = 1
-        
-        print('{}: Rasterized.'.format(time() - tic))
-        
-        return torch.squeeze(raster)
 
     def _raster_shrunk(self, curve, sigma=1e-2):
         x = curve[0]
