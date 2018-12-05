@@ -79,11 +79,6 @@ class Bezier(torch.nn.Module):
         
         spread = 2 * sigma
         # nextpow2 above 2 standard deviations in both x and y
-<<<<<<< HEAD
- #       w = 2*int(2**np.ceil(np.log2(self.res*spread)))
-        w = 32
-#        print(w)
-=======
         w = 2*int(2**np.ceil(np.log2(self.res*spread)))
         print(w)
         
@@ -133,7 +128,6 @@ class Bezier(torch.nn.Module):
         w = 2*int(2**np.ceil(np.log2(self.res*spread)))
         if args.debug:
             print(w)
->>>>>>> upstream/master
         # lower left corner of a w*w block centered on each point of the curve
         blocks = torch.clamp((self.res * curve).floor().int() - w // 2, 0,  self.res - w)
 
@@ -158,13 +152,6 @@ class Bezier(torch.nn.Module):
         #  xmax, ymax = [(self.res * (i.max() + 3*sigma)).ceil().int().item() for i in (x, y)]
         #  xmin, ymin = [(self.res * (i.min() - 3*sigma)).floor().int().item() for i in (x, y)]
         
-<<<<<<< HEAD
-        
-
-        c = torch.stack([self.c[x:x+w, y:y+w, t] for t, (x, y) in enumerate(torch.t(blocks))], dim=2)
-        d = torch.stack([self.d[x:x+w, y:y+w, t] for t, (x, y) in enumerate(torch.t(blocks))], dim=2)
-        #print(time() - tic)
-=======
         # w * w * self.steps
         #  c = torch.zeros([w, w, self.steps])
         #  d = torch.zeros([w, w, self.steps])
@@ -192,7 +179,6 @@ class Bezier(torch.nn.Module):
         #  idx = torch.LongTensor
         #  self.r.scatter_(2, raster_)
         raster = torch.zeros([self.res, self.res], requires_grad=False)
->>>>>>> upstream/master
         for t, (x, y) in enumerate(torch.t(blocks)):
             raster[x:x+w, y:y+w] += raster_[:,:,t]
         # raster = torch.mean(self.r, dim=2)
@@ -211,12 +197,8 @@ class Bezier(torch.nn.Module):
             #  raster_ = torch.exp((-(x_ - c)**2 - (y_ - d) ** 2) / (2*sigma**2))
             #  raster_ = torch.mean(raster_, dim=2)
             #  raster[xmin:xmax, ymin:ymax] = raster_
-<<<<<<< HEAD
-        #print(time() - tic)
-=======
         if args.debug:
             print('{}: Rasterized.'.format(time() - tic))
->>>>>>> upstream/master
         
         return torch.squeeze(raster)
 
@@ -241,7 +223,6 @@ net = Bezier(res=args.res, steps=args.steps, method=args.method)
 control_points_l = [
     [0.1, 0.1],
     [0.9, 0.9],
-    [0.1, 0.4],
     [0.5, 0.9]
     ]
 
