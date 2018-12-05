@@ -11,20 +11,37 @@ class Bezier(torch.nn.Module):
         super(Bezier, self).__init__()
         self.res = res
         self.steps = steps
-        if method == 'base':
-            self.raster = self._raster_base
-        elif method == 'shrunk':
-            self.raster = self._raster_shrunk
 
         C, D = np.meshgrid(range(self.res), range(self.res))
         C_e = C[np.newaxis, :, :]
         D_e = D[np.newaxis, :, :]
         
-        c = Variable(torch.Tensor(C_e / res)).expand(self.steps, self.res, self.res)
-        d = Variable(torch.Tensor(D_e / res)).expand(self.steps, self.res, self.res)
+        c = torch.Tensor(C_e / res).to(device).expand(self.steps, self.res, self.res)
+        d = torch.Tensor(D_e / res).to(device).expand(self.steps, self.res, self.res)
 
         self.c = torch.transpose(c, 0, 2)
-        self.d = torch.transpose(d, 0, 2)        
+        self.d = torch.transpose(d, 0, 2)
+        self.steps_t = (torch.arange(0, self.steps).float() / float(self.steps)).expand(2, self.steps).to(device)
+        
+        if method == 'base':
+            self.raster = self._raster_base
+        elif method == 'bounded':
+            self.raster = self._raster_bounded
+        elif method == 'bounded_tight':
+            self.raster = self._raster_bounded_tight
+        
+            C, D = np.meshgrid(range(-self.res, self.res), range(-self.res, self.res))
+            C_e = C[np.newaxis, :, :]
+            D_e = D[np.newaxis, :, :]
+            
+            c = Variable(torch.Tensor(C_e / res)).expand(self.steps, 2*self.res, 2*self.res).to(device)
+            d = Variable(torch.Tensor(D_e / res)).expand(self.steps, 2*self.res, 2*self.res).to(device)
+
+            self.c = torch.transpose(c, 0, 2)
+            self.d = torch.transpose(d, 0, 2)
+        elif method == 'shrunk':
+            self.raster = self._raster_shrunk
+
         #  if use_cuda:
             #  torch.cuda.synchronize()
         
@@ -35,7 +52,7 @@ class Bezier(torch.nn.Module):
           a_= point2[0].expand(num_steps)
           b_ = point2[1].expand(num_steps)
           
-          t = Variable(torch.linspace(0, 1, num_steps))
+          t = torch.linspace(0, 1, num_steps)
         
           interp1 = a + (a_ - a) * t
           interp2 = b + (b_ - b) * t
@@ -45,31 +62,126 @@ class Bezier(torch.nn.Module):
     def forward(self, control_points):
         a = self.lin_interp(control_points[0], control_points[1], self.steps)
         b = self.lin_interp(control_points[1], control_points[2], self.steps)
+        #  curve = a + (self.steps_t) * (b - a)
         steps = Variable(torch.arange(0, self.steps).expand(2, self.steps))
         curve = a + (steps.float() / float(self.steps)) * (b - a)
         return self.raster(curve)
     
-    def _raster_base(self, curve, sigma=1e-3):
+    def _raster_base(self, curve, sigma=1e-2):
+        tic = time()
+        
         x = curve[0]
         y = curve[1]
-        x_ = x.expand(self.res, self.res, 100)
-        y_ = y.expand(self.res, self.res, 100)
-        tic = time()
-        raster = torch.exp(-(x_ - self.c)**2 / 2e-4 - (y_ - self.d) ** 2 / 2e-4)
+
+        x_ = x.to(device).expand(self.res, self.res, self.steps)
+        y_ = y.to(device).expand(self.res, self.res, self.steps)
+        if args.debug:
+            print(time() - tic)
+        
+        raster = torch.exp((-(x_ - self.c)**2 - (y_ - self.d)**2) / (2*sigma**2))
         raster = torch.mean(raster, dim=2)
         if args.debug:
             print(time() - tic)
         
-        return torch.squeeze(raster)
+        return torch.transpose(torch.squeeze(raster), 0, 1)
+    
+    def _raster_linear(self, curve, sigma=1e-2):
+        tic = time()
+        
+        x = curve[0]
+        y = curve[1]
+
+        x_ = x.expand(self.res, self.res, self.steps).to(device)
+        y_ = y.expand(self.res, self.res, self.steps).to(device)
+        
+        raster = torch.exp((-(x_ - self.c)**2 - (y_ - self.d) ** 2) / (2*sigma**2))
+        raster = torch.mean(raster, dim=2)
+        if args.debug:
+            print(time() - tic)
+        
+        return torch.transpose(torch.squeeze(raster), 0, 1)
+
+    def _raster_bounded(self, curve, sigma=1e-2):
+        tic = time()
+        
+        x = curve[0]
+        y = curve[1]
+
+        xmax = (self.res * (x.max() + 3*sigma)).ceil().int().item()
+        ymax = (self.res * (y.max() + 3*sigma)).ceil().int().item()
+        xmin = (self.res * (x.min() - 3*sigma)).floor().int().item()
+        ymin = (self.res * (y.min() - 3*sigma)).floor().int().item()
+        if args.debug:
+            print(time() - tic)
+        w = xmax-xmin
+        h = ymax-ymin
+        
+        x_ = x.to(device).expand(w, h, self.steps)
+        y_ = y.to(device).expand(w, h, self.steps)
+        
+        
+        if args.debug:
+            print(time() - tic)
+        c = self.c[xmin:xmax, ymin:ymax]
+        d = self.d[xmin:xmax, ymin:ymax]
+
+        if args.debug:
+            print(time() - tic)
+        raster_ = torch.exp((-(x_ - c)**2 - (y_ - d)**2) / (2*sigma**2))
+        raster_ = torch.mean(raster_, dim=2)
+        if args.debug:
+            print(time() - tic)
+        raster = torch.zeros([self.res, self.res]).to(device)
+        raster[xmin:xmax, ymin:ymax] = raster_
+        if args.debug:
+            print(time() - tic)
+
+        return torch.transpose(torch.squeeze(raster), 0, 1)
+    
+    def _raster_bounded_tight(self, curve, sigma=1e-2):
+        tic = time()
+        print(curve) 
+        T = curve[:, 0].expand(self.steps, 2).transpose(0, 1)
+        curve -= T
+        print(curve)
+        theta = torch.atan(curve[1, -1] / curve[0, -1])
+        print(theta)
+        R = torch.Tensor([[theta.cos(), theta.sin()], [-theta.sin(), theta.cos()]])
+        curve = R.matmul(curve)
+        print(R)
+        print(curve)
+        x = curve[0]
+        y = curve[1]
+        xmax, ymax = [(self.res * (i.max() + 3*sigma)).ceil().int().item() for i in (x, y)]
+        xmin, ymin = [(self.res * (i.min() - 3*sigma)).floor().int().item() for i in (x, y)]
+        w = xmax-xmin
+        h = ymax-ymin
+        print(xmin, xmax)
+        print(ymin, ymax)
+        x_ = x.expand(w, h, self.steps)
+        y_ = y.expand(w, h, self.steps)
+        c = self.c[self.res+xmin:self.res+xmax, self.res+ymin:self.res+ymax]
+        d = self.d[self.res+xmin:self.res+xmax, self.res+ymin:self.res+ymax]
+        print(c)
+        print(d)
+        raster_ = torch.exp((-(x_ - c)**2 - (y_ - d) ** 2) / (2*sigma**2))
+        raster_ = torch.mean(raster_, dim=2)
+        raster = torch.zeros([2*self.res, 2*self.res])
+        raster[self.res+xmin:self.res+xmax, self.res+ymin:self.res+ymax] = raster_
+
+        if args.debug:
+            print(time() - tic)
+
+        return torch.transpose(torch.squeeze(raster), 0, 1)
+
 
     def _raster_shrunk(self, curve, sigma=1e-2):
+        tic = time()
+        
         x = curve[0]
         y = curve[1]
         
-        # torch.cuda.synchronize()
-
-        tic = time()
-        
+        raster = torch.zeros([self.res, self.res], requires_grad=False).to(device)
         spread = 2 * sigma
         # nextpow2 above 2 standard deviations in both x and y
         w = 2*int(2**np.ceil(np.log2(self.res*spread)))
@@ -107,8 +219,8 @@ class Bezier(torch.nn.Module):
             #  d[:,:,t] = self.d[px:px+w, py:py+w, t]
         if args.debug:
             print('{}: Bounding rectangles found.'.format(time() - tic))
-        c = torch.stack([self.c[px:px+w, py:py+w, t] for t, (px, py) in enumerate(torch.t(blocks))], dim=2)
-        d = torch.stack([self.d[px:px+w, py:py+w, t] for t, (px, py) in enumerate(torch.t(blocks))], dim=2)
+        c = torch.stack([self.c[px:px+w, py:py+w, t] for t, (px, py) in enumerate(torch.t(blocks))], dim=2).to(device)
+        d = torch.stack([self.d[px:px+w, py:py+w, t] for t, (px, py) in enumerate(torch.t(blocks))], dim=2).to(device)
         if args.debug:
             print('{}: Bounding rectangles found.'.format(time() - tic))
         x_ = x.expand(w, w, self.steps)
@@ -121,7 +233,6 @@ class Bezier(torch.nn.Module):
             print('{}: Gradient generated.'.format(time() - tic))
         #  idx = torch.LongTensor
         #  self.r.scatter_(2, raster_)
-        raster = torch.zeros([self.res, self.res], requires_grad=False)
         for t, (x, y) in enumerate(torch.t(blocks)):
             raster[x:x+w, y:y+w] += raster_[:,:,t]
         # raster = torch.mean(self.r, dim=2)
@@ -146,7 +257,7 @@ class Bezier(torch.nn.Module):
         return torch.squeeze(raster)
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--cuda', action='store_true', help='')
+parser.add_argument('--disable-cuda', action='store_true', help='')
 parser.add_argument('--display', action='store_true', help='')
 parser.add_argument('--debug', action='store_true', help='')
 parser.add_argument('--steps', default=100, type=int, help='')
@@ -156,10 +267,10 @@ parser.add_argument('--passes', default=1, type=int, help='')
 
 args = parser.parse_args()
 
-use_cuda = args.cuda and torch.cuda.is_available()
+use_cuda = not args.disable_cuda and torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
 print('Using device "{}"'.format(device))
-torch.set_default_tensor_type(torch.cuda.FloatTensor if use_cuda else torch.FloatTensor)
+# torch.set_default_tensor_type(torch.cuda.FloatTensor if use_cuda else torch.FloatTensor)
 
 net = Bezier(res=args.res, steps=args.steps, method=args.method)
 
@@ -169,21 +280,20 @@ control_points_l = [
     [0.5, 0.9]
     ]
 
-control_points_t = Variable(torch.Tensor(np.array(control_points_l), device=device), requires_grad=True)
+control_points_t = Variable(torch.Tensor(np.array(control_points_l)), requires_grad=True)
 
-tic_total = time()
 elapsed_fw, elapsed_bw = 0, 0
 
 passes = args.passes
+crit = torch.nn.L1Loss().cuda()
+tic_total = time()
 for i in range(passes):
     tic = time()
     curve = net.forward(control_points_t)
     elapsed_fw += time() - tic
-    # print('{}: Total.'.format(time() - tic))
-
+    #  print('{}: Total.'.format(time() - tic))
+    loss = crit(curve, torch.tensor(curve))
     tic = time()
-    crit = torch.nn.L1Loss()
-    loss = crit(curve, Variable(torch.Tensor(curve.data)))
     #  print('{}: Loss.'.format(time() - tic))
     loss.backward()
     elapsed_bw += time() - tic
