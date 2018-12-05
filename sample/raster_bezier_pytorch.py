@@ -67,9 +67,9 @@ control_points_l = [
 
 control_points_t = Variable(torch.Tensor(np.array(control_points_l)), requires_grad=True)
 
-#tic = time()
+tic = time()
 curve = net.forward(control_points_t)
-#print(time() - tic)
+print(time() - tic)
 
 crit = torch.nn.L1Loss()
 loss = crit(curve, Variable(torch.Tensor(curve.data)))

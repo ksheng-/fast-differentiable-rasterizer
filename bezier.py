@@ -164,15 +164,11 @@ class Bezier(torch.nn.Module):
         d = torch.stack([self.d[px:px+w, py:py+w, t] for t, (px, py) in enumerate(torch.t(blocks))], dim=2)
         if args.debug:
             print('{}: Bounding rectangles found.'.format(time() - tic))
->>>>>>> upstream/master
         x_ = x.expand(w, w, self.steps)
         y_ = y.expand(w, w, self.steps)
         if args.debug:
             print('{}: Dims expanded.'.format(time() - tic))
         raster_ = torch.exp((-(x_ - c)**2 - (y_ - d)**2) / (2*sigma**2))
-<<<<<<< HEAD
-        #print(time() - tic)
-=======
         # raster_ = (x_ - c)**2 + (y_ - d)**2
         if args.debug:
             print('{}: Gradient generated.'.format(time() - tic))
