@@ -22,3 +22,4 @@ Averaged across 100 passes with params res=512, steps=128 on a GCP n1-standard-8
 |shrunk_cpu     |12.7 ms  |113.4 ms |126.1 ms |5.91x   |
 |shrunk_cuda    |49.4 ms  |20.0 ms  |69.4 ms  |10.74x  |
 |baseline_cuda  |0.9 ms   |8.3 ms   |9.2 ms   |81.05x  |
+
