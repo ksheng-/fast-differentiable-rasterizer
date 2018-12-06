@@ -4,6 +4,7 @@ import argparse
 import torch
 import numpy as np
 from torch.autograd import Variable
+from torch.multiprocessing import Pool
 from time import time
 
 class Bezier(torch.nn.Module):
@@ -29,18 +30,28 @@ class Bezier(torch.nn.Module):
             self.raster = self._raster_bounded
         elif method == 'bounded_tight':
             self.raster = self._raster_bounded_tight
-        
-            C, D = np.meshgrid(range(-self.res, self.res), range(-self.res, self.res))
-            C_e = C[np.newaxis, :, :]
-            D_e = D[np.newaxis, :, :]
-            
-            c = Variable(torch.Tensor(C_e / res)).expand(self.steps, 2*self.res, 2*self.res).to(device)
-            d = Variable(torch.Tensor(D_e / res)).expand(self.steps, 2*self.res, 2*self.res).to(device)
-
-            self.c = torch.transpose(c, 0, 2)
-            self.d = torch.transpose(d, 0, 2)
         elif method == 'shrunk':
             self.raster = self._raster_shrunk
+        elif method == 'tiled':
+            # break in to NxN tiles
+            self.tiles = 4
+            self.chunksize = self.res // self.tiles
+
+            #  print(self.c)
+            #  self.c = self.c.reshape(-1, self.chunksize, self.chunksize, self.steps)
+            #  self.d = self.d.reshape(-1, self.chunksize, self.chunksize, self.steps)
+            # V100 has 80 sms
+            self.streams = [torch.cuda.Stream() for i in range(self.tiles**2)]
+            self.raster = self._raster_tiled
+        elif method == 'reindex_tiled':
+            # break in to NxN tiles
+            self.tiles = 4
+            self.chunksize = self.res // self.tiles
+
+            self.c = self.c.reshape(-1, self.chunksize, self.chunksize, self.steps)
+            self.d = self.d.reshape(-1, self.chunksize, self.chunksize, self.steps)
+            self.streams = [torch.cuda.Stream() for i in range(self.tiles**2)]
+            self.raster = self._raster_reindex_tiled
 
         #  if use_cuda:
             #  torch.cuda.synchronize()
@@ -60,6 +71,7 @@ class Bezier(torch.nn.Module):
           return torch.stack([interp1, interp2])
 
     def forward(self, control_points):
+        # NCHW
         a = self.lin_interp(control_points[0], control_points[1], self.steps)
         b = self.lin_interp(control_points[1], control_points[2], self.steps)
         #  curve = a + (self.steps_t) * (b - a)
@@ -111,8 +123,13 @@ class Bezier(torch.nn.Module):
         ymax = (self.res * (y.max() + 3*sigma)).ceil().int().item()
         xmin = (self.res * (x.min() - 3*sigma)).floor().int().item()
         ymin = (self.res * (y.min() - 3*sigma)).floor().int().item()
+
+        #  x_ind = torch.arange((self.res * (x.min() - 3*sigma)).floor(), (self.res * (x.max() + 3*sigma)).ceil()).long()
+        #  y_ind = torch.arange((self.res * (y.min() - 3*sigma)).floor(), (self.res * (y.max() + 3*sigma)).ceil()).long()
         if args.debug:
             print(time() - tic)
+
+        
         w = xmax-xmin
         h = ymax-ymin
         
@@ -138,15 +155,94 @@ class Bezier(torch.nn.Module):
 
         return torch.transpose(torch.squeeze(raster), 0, 1)
     
+    def _raster_tiled(self, curve, sigma=1e-2):
+        tic = time()
+        
+        x = curve[0]
+        y = curve[1]
+
+        raster = torch.zeros([self.res, self.res]).to(device)
+        
+        r = x + 3*sigma
+        l = x - 3*sigma
+        b = y - 3*sigma
+        t = y - 3*sigma
+        
+        x_ = x.to(device).expand(self.res, self.res, self.steps)
+        y_ = y.to(device).expand(self.res, self.res, self.steps)
+        #  x_ = x.to(device).expand(self.res, self.res, self.steps).reshape(-1, self.chunksize, self.chunksize, self.steps)
+        #  y_ = y.to(device).expand(self.res, self.res, self.steps).reshape(-1, self.chunksize, self.chunksize, self.steps)
+        
+        torch.cuda.synchronize()
+        for tile, stream in enumerate(self.streams):
+            with torch.cuda.stream(stream):
+                y_tile, x_tile = divmod(tile, self.tiles)
+                x_idx = self.chunksize * x_tile
+                y_idx = self.chunksize * y_tile
+                xi = x_[x_idx:x_idx+self.chunksize, y_idx:y_idx+self.chunksize, :]
+                yi = y_[x_idx:x_idx+self.chunksize, y_idx:y_idx+self.chunksize, :]
+                ci = self.c[x_idx:x_idx+self.chunksize, y_idx:y_idx+self.chunksize, :]
+                di = self.d[x_idx:x_idx+self.chunksize, y_idx:y_idx+self.chunksize, :]
+                raster_ = torch.exp((-(xi - ci)**2 - (yi - di)**2) / (2*sigma**2))
+                raster_ = torch.mean(raster_, dim=2)
+                raster[x_idx:x_idx+self.chunksize, y_idx:y_idx+self.chunksize] = raster_
+        torch.cuda.synchronize()
+
+        #  torch.multiprocessing.set_start_method('spawn')
+        #  pool = Pool(N**2)
+        #  pool.map(stream_fn, range(N**2))
+        #  print(c_.size())
+        
+        if args.debug:
+            print(time() - tic)
+        
+        #  x_ = x.to(device).expand(self.res, self.res, self.steps)
+        #  y_ = y.to(device).expand(self.res, self.res, self.steps)
+        #  raster = torch.exp((-(x_ - self.c)**2 - (y_ - self.d)**2) / (2*sigma**2))
+        #  raster = torch.mean(raster, dim=2)
+        
+        return torch.transpose(torch.squeeze(raster), 0, 1)
+    
+    def _raster_reindex_tiled(self, curve, sigma=1e-2):
+        tic = time()
+        
+        x = curve[0]
+        y = curve[1]
+
+        raster = torch.zeros([self.res, self.res]).to(device)
+        
+        r = x + 3*sigma
+        l = x - 3*sigma
+        b = y - 3*sigma
+        t = y - 3*sigma
+        
+        x_ = x.to(device).expand(self.res, self.res, self.steps).reshape(-1, self.chunksize, self.chunksize, self.steps)
+        y_ = y.to(device).expand(self.res, self.res, self.steps).reshape(-1, self.chunksize, self.chunksize, self.steps)
+        
+        torch.cuda.synchronize()
+        for tile, stream in enumerate(self.streams[:2]):
+            with torch.cuda.stream(stream):
+                y_tile, x_tile = divmod(tile, self.tiles)
+                x_idx = self.chunksize * x_tile
+                y_idx = self.chunksize * y_tile
+                raster_ = torch.exp((-(x_[tile] - self.c[tile])**2 - (y_[tile] - self.d[tile])**2) / (2*sigma**2))
+                raster_ = torch.mean(raster_, dim=2)
+                raster[x_idx:x_idx+self.chunksize, y_idx:y_idx+self.chunksize] = raster_
+        torch.cuda.synchronize()
+        
+        return torch.transpose(torch.squeeze(raster), 0, 1)
+        
     def _raster_bounded_tight(self, curve, sigma=1e-2):
         tic = time()
         print(curve) 
+        # align start and end points
+        theta = torch.atan(curve[1, -1] / curve[0, -1])
+        print(theta)
+        R = torch.Tensor([[theta.cos(), theta.sin()], [-theta.sin(), theta.cos()]]).to(device)
+        
         T = curve[:, 0].expand(self.steps, 2).transpose(0, 1)
         curve -= T
         print(curve)
-        theta = torch.atan(curve[1, -1] / curve[0, -1])
-        print(theta)
-        R = torch.Tensor([[theta.cos(), theta.sin()], [-theta.sin(), theta.cos()]])
         curve = R.matmul(curve)
         print(R)
         print(curve)
@@ -260,7 +356,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--disable-cuda', action='store_true', help='')
 parser.add_argument('--display', action='store_true', help='')
 parser.add_argument('--debug', action='store_true', help='')
-parser.add_argument('--steps', default=100, type=int, help='')
+parser.add_argument('--steps', default=128, type=int, help='')
 parser.add_argument('--res', default=512, type=int, help='')
 parser.add_argument('--method', default='base', help='')
 parser.add_argument('--passes', default=1, type=int, help='')
@@ -279,6 +375,11 @@ control_points_l = [
     [0.9, 0.9],
     [0.5, 0.9]
     ]
+
+batch_size = 32
+control_points_batch = [control_points_l for i in range(batch_size)]
+#  control_points_batch = control_points_l * batch_size
+# print(torch.Tensor(np.array(control_points_batch)).size())
 
 control_points_t = Variable(torch.Tensor(np.array(control_points_l)), requires_grad=True)
 
