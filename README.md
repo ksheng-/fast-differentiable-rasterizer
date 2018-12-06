@@ -78,7 +78,7 @@ python bezier.py --passes 100 --batch 16 --method <method> [--disable-cuda]
 python bezier.py --passes 100 --batch <num_curves> --method <method> [--disable-cuda]
 
 |num_curves     |base                 |half                 |tiled                  |
-|---------------|--------------------:|--------------------:|--------------------- :|
+|---------------|--------------------:|--------------------:|----------------------:|
 |2              |1.6 (0.8F+0.8B) s    |11.5 (0.8F+10.7B) ms |41.6 (18.5F+23.1B) ms  |
 |4              |3.3 (1.6F+1.7B) s    |21.9 (1.2F+20.7B) ms |67.1 (23.7F+43.4B) ms  |
 |8              |6.3 (2.9F+3.4B) s    |42.3 (1.9F+40.4B) ms |118.5 (33.9F+84.6B) ms |
@@ -86,6 +86,7 @@ python bezier.py --passes 100 --batch <num_curves> --method <method> [--disable-
 
 ### Test 6: max_memory_allocated vs num_curves
 python bezier.py --passes 100 --batch <num_curves> --method <method>
+  
 |num_curves     |half     |cuda     |
 |---------------|--------:|--------:|
 |2              |1.9 GB   |0.7 GB   |
