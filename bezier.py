@@ -29,25 +29,26 @@ class Bezier(torch.nn.Module):
             #  torch.cuda.synchronize()
         
     @staticmethod
-    def lin_interp(point1, point2, num_steps):
-          a = point1[0].expand(num_steps)
-          b = point1[1].expand(num_steps)
-          a_= point2[0].expand(num_steps)
-          b_ = point2[1].expand(num_steps)
-          
-          t = Variable(torch.linspace(0, 1, num_steps))
-        
-          interp1 = a + (a_ - a) * t
-          interp2 = b + (b_ - b) * t
-        
-          return torch.stack([interp1, interp2])
+    def lin_interp(point1, point2, steps):
+        #t = Variable(torch.linspace(0, 1, num_steps))
+        interp1 = point1[0] + (point2[0] - point1[0]) * steps
+        interp2 = point1[1] + (point2[1] - point1[1]) * steps
+        return torch.stack([interp1, interp2])
 
     def forward(self, control_points):
-        a = self.lin_interp(control_points[0], control_points[1], self.steps)
-        b = self.lin_interp(control_points[1], control_points[2], self.steps)
-        steps = Variable(torch.arange(0, self.steps).expand(2, self.steps))
-        curve = a + (steps.float() / float(self.steps)) * (b - a)
-        return self.raster(curve)
+#        steps = Variable(torch.arange(0, self.steps).expand(2, self.steps))
+#        steps_ = steps.float()/float(self.steps)
+        steps_ = Variable(torch.linspace(0, 1, self.steps))
+        a = self.quadforward(control_points[0:3,:],steps_)
+        if control_points.size()[0] == 4:
+            b = self.quadforward(control_points[1:4,:],steps_)
+            return self.raster(a + steps_ * (b-a))
+        return self.raster(a)
+
+    def quadforward(self,control_points,steps):    
+        a = self.lin_interp(control_points[0], control_points[1], steps)
+        b = self.lin_interp(control_points[1], control_points[2], steps)
+        return a + steps * (b - a)
     
     def _raster_base(self, curve, sigma=1e-3):
         x = curve[0]
@@ -217,9 +218,10 @@ torch.set_default_tensor_type(torch.cuda.FloatTensor if use_cuda else torch.Floa
 net = Bezier(res=args.res, steps=args.steps, method=args.method)
 
 control_points_l = [
-    [0.1, 0.1],
-    [0.9, 0.9],
-    [0.5, 0.9]
+    [1, 0],
+    [0.21, 0.12],
+    [0.72, 0.83],
+    [0,1]
     ]
 
 control_points_t = Variable(torch.Tensor(np.array(control_points_l), device=device), requires_grad=True)
