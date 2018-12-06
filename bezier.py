@@ -13,8 +13,10 @@ class Bezier(torch.nn.Module):
         self.steps = steps
         if method == 'base':
             self.raster = self._raster_base
+            self.lin_interp = self.lin_interp_base
         elif method == 'shrunk':
             self.raster = self._raster_shrunk
+            self.lin_interp = self.lin_interp_fast
 
         C, D = np.meshgrid(range(self.res), range(self.res))
         C_e = C[np.newaxis, :, :]
@@ -29,7 +31,21 @@ class Bezier(torch.nn.Module):
             #  torch.cuda.synchronize()
         
     @staticmethod
-    def lin_interp(point1, point2, steps):
+    def lin_interp_base(point1, point2, num_steps, steps):
+          a = point1[0].expand(num_steps)
+          b = point1[1].expand(num_steps)
+          a_= point2[0].expand(num_steps)
+          b_ = point2[1].expand(num_steps)
+          
+          t = Variable(torch.linspace(0, 1, num_steps))
+        
+          interp1 = a + (a_ - a) * t
+          interp2 = b + (b_ - b) * t
+        
+          return torch.stack([interp1, interp2])
+
+    @staticmethod
+    def lin_interp_fast(point1, point2, num_steps,steps):
         #t = Variable(torch.linspace(0, 1, num_steps))
         interp1 = point1[0] + (point2[0] - point1[0]) * steps
         interp2 = point1[1] + (point2[1] - point1[1]) * steps
@@ -46,8 +62,8 @@ class Bezier(torch.nn.Module):
         return self.raster(a)
 
     def quadforward(self,control_points,steps):    
-        a = self.lin_interp(control_points[0], control_points[1], steps)
-        b = self.lin_interp(control_points[1], control_points[2], steps)
+        a = self.lin_interp(control_points[0], control_points[1], self.steps,steps)
+        b = self.lin_interp(control_points[1], control_points[2], self.steps,steps)
         return a + steps * (b - a)
     
     def _raster_base(self, curve, sigma=1e-3):
