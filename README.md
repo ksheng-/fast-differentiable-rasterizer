@@ -23,3 +23,10 @@ Averaged across 100 passes with params res=512, steps=128 on a GCP n1-standard-8
 |shrunk_cuda    |49.4 ms  |20.0 ms  |69.4 ms  |10.74x  |
 |baseline_cuda  |0.9 ms   |8.3 ms   |9.2 ms   |81.05x  |
 
+
+100    0.220    0.002    0.316    0.003 bezier.py:73(_raster_base)
+100    0.056    0.001    0.056    0.001 {built-in method mean}
+100    0.030    0.000    0.030    0.000 {built-in method exp}
+100    0.010    0.000    0.010    0.000 {built-in method sum}
+200    0.009    0.000    0.015    0.000 bezier.py:50(lin_interp)
+100    0.006    0.000    0.339    0.003 bezier.py:64(forward)
