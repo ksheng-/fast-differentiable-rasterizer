@@ -69,8 +69,8 @@ python bezier.py --passes 100 --batch 16 --method <method> [--disable-cuda]
 |base           |414.9 ms |448.4 ms |863.3 ms |1.00x   |N/A      |
 |cuda           |0.6 ms   |5.7 ms   |6.3 ms   |137.03x |942 MB   |
 |half           |0.8 ms   |4.1 ms   |4.9 ms   |176.18x |607 MB   |
-|tiled          |15.2 ms  |13.1 ms  |28.3 ms  |30.51x  |347 MB   |
 |bounded        |2.5 ms   |3.3 ms   |5.8 ms   |148.84x |486 MB   |
+|tiled          |15.2 ms  |13.1 ms  |28.3 ms  |30.51x  |347 MB   |
 |shrunk_cpu     |16.2 ms  |142.5 ms |158.7 ms |5.44x   |N/A      |
 |shrunk_cuda    |18.3 ms  |22.9 ms  |41.2 ms  |20.95x  |8 MB     |
 
