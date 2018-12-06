@@ -53,13 +53,13 @@ python bezier.py --passes 100 --draw char --method <method> [--disable-cuda]
 
 |method         |forward  |backward |total    |speedup |peak_mem |
 |---------------|--------:|--------:|--------:|-------:|--------:|
-|base           |1131.9 ms|1217.5 ms|    ms   |1.00x   |N/A      |
-|cuda           |0.9 ms   |15.7 ms  |    ms   |        |2821 MB  |
-|half           |1.4 ms   |11.2 ms  |    ms   |        |1815 MB  |
-|bounded        |7.6 ms   |11.7 ms  |    ms   |        |2104 MB  |
-|tiled          |28.8 ms  |51.0 ms  |    ms   |        |1031 MB  |
-|shrunk_cpu     |48.8 ms  |383.8 ms |    ms   |        |N/A      |
-|shrunk_cuda    |55.9 ms  |69.7 ms  |    ms   |        |15 MB    |
+|base           |1131.9 ms|1217.5 ms|2349.4 ms|1.00x   |N/A      |
+|cuda           |0.9 ms   |15.7 ms  |16.6 ms  |141.53x |2821 MB  |
+|half           |1.4 ms   |11.2 ms  |12.6 ms  |186.46x |1815 MB  |
+|bounded        |7.6 ms   |11.7 ms  |19.3 ms  |121.73x |2104 MB  |
+|tiled          |28.8 ms  |51.0 ms  |79.8 ms  |29.44x  |1031 MB  |
+|shrunk_cpu     |48.8 ms  |383.8 ms |432.6 ms |5.43x   |N/A      |
+|shrunk_cuda    |55.9 ms  |69.7 ms  |125.6 ms |18.71x  |15 MB    |
 
 ### Test 4: ms/iter 16 section composite quadratic curve (100 passes)
 python bezier.py --passes 100 --batch 16 --method <method> [--disable-cuda]
