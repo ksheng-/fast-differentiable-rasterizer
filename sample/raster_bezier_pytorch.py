@@ -50,19 +50,27 @@ class Bezier(torch.nn.Module):
       
     def forward(self, control_points):
         n_steps = 100
+        steps = Variable(torch.arange(0, n_steps).expand(2, n_steps))
+        a = self.quadforward(control_points[0:3,:],steps)
+        if control_points.size()[0] == 4:
+            b = self.quadforward(control_points[1:4,:],steps)
+            curve = a + (steps.float()/float(n_steps))*(b-a)
+            return self.raster(curve)
+        return self.raster(a)
+
+    def quadforward(self,control_points,steps):
+        n_steps = 100
         a = self.lin_interp(control_points[0], control_points[1], n_steps)
         b = self.lin_interp(control_points[1], control_points[2], n_steps)
-        steps = Variable(torch.arange(0, n_steps).expand(2, n_steps))
-        curve = a + (steps.float() / float(n_steps)) * (b - a)
-
-        return self.raster(curve)
+        return a + (steps.float() / float(n_steps)) * (b - a)
 
 net = Bezier()
 
 control_points_l = [
-    [0.1, 0.1],
-    [0.9, 0.9],
-    [0.5, 0.9]
+    [1.0,0.0],
+    [0.21,0.12],
+    [0.72,0.83],
+    [0.0,1.0]
     ]
 
 control_points_t = Variable(torch.Tensor(np.array(control_points_l)), requires_grad=True)

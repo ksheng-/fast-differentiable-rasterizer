@@ -22,16 +22,19 @@ class Bezier(torch.nn.Module):
 
         self.c = torch.transpose(c, 0, 2)
         self.d = torch.transpose(d, 0, 2)
-        self.steps_t = (torch.arange(0, self.steps).float() / float(self.steps)).expand(2, self.steps).to(device)
         
         if method == 'base':
             self.raster = self._raster_base
+            self.lin_interp = self._lin_interp_broadcast
         elif method == 'bounded':
             self.raster = self._raster_bounded
+            self.lin_interp = self._lin_interp_base
         elif method == 'bounded_tight':
             self.raster = self._raster_bounded_tight
+            self.lin_interp = self._lin_interp_base
         elif method == 'shrunk':
             self.raster = self._raster_shrunk
+            self.lin_interp = self._lin_interp_base
         elif method == 'tiled':
             # break in to NxN tiles
             self.tiles = 4
@@ -43,6 +46,7 @@ class Bezier(torch.nn.Module):
             # V100 has 80 sms
             self.streams = [torch.cuda.Stream() for i in range(self.tiles**2)]
             self.raster = self._raster_tiled
+            self.lin_interp = self._lin_interp_base
         elif method == 'reindex_tiled':
             # break in to NxN tiles
             self.tiles = 4
@@ -52,32 +56,47 @@ class Bezier(torch.nn.Module):
             self.d = self.d.reshape(-1, self.chunksize, self.chunksize, self.steps)
             self.streams = [torch.cuda.Stream() for i in range(self.tiles**2)]
             self.raster = self._raster_reindex_tiled
+            self.lin_interp = self._lin_interp_base
 
         #  if use_cuda:
             #  torch.cuda.synchronize()
         
     @staticmethod
-    def lin_interp(point1, point2, num_steps):
-          a = point1[0].expand(num_steps)
-          b = point1[1].expand(num_steps)
-          a_= point2[0].expand(num_steps)
-          b_ = point2[1].expand(num_steps)
-          
-          t = torch.linspace(0, 1, num_steps)
-        
-          interp1 = a + (a_ - a) * t
-          interp2 = b + (b_ - b) * t
-        
-          return torch.stack([interp1, interp2])
+    def _lin_interp_base(point1, point2, num_steps):
+        a = point1[0].expand(num_steps)
+        b = point1[1].expand(num_steps)
+        a_= point2[0].expand(num_steps)
+        b_ = point2[1].expand(num_steps)
+
+        t = torch.linspace(0, 1, num_steps)
+        interp1 = a + (a_ - a) * t
+        interp2 = b + (b_ - b) * t
+
+        return torch.stack([interp1, interp2])
+
+    @staticmethod
+    def _lin_interp_broadcast(point1, point2, num_steps):
+        t = torch.linspace(0, 1, num_steps)
+        interp1 = point1[0] + (point2[0] - point1[0]) * t
+        interp2 = point1[1] + (point2[1] - point1[1]) * t
+        return torch.stack([interp1, interp2])
 
     def forward(self, control_points):
         # NCHW
-        a = self.lin_interp(control_points[0], control_points[1], self.steps)
-        b = self.lin_interp(control_points[1], control_points[2], self.steps)
-        #  curve = a + (self.steps_t) * (b - a)
-        steps = Variable(torch.arange(0, self.steps).expand(2, self.steps))
-        curve = a + (steps.float() / float(self.steps)) * (b - a)
+        if control_points.size()[0] == 3:
+            curve = self.quadratic_curve(control_points[:3], self.steps)
+        if control_points.size()[0] == 4:
+            a = self.quadratic_curve(control_points[:3], self.steps)
+            b = self.quadratic_curve(control_points[1:4], self.steps)
+            steps = torch.linspace(0, 1, self.steps)
+            curve = (a + steps * (b - a))
         return self.raster(curve)
+
+    def quadratic_curve(self, control_points, num_steps):  
+        a = self.lin_interp(control_points[0], control_points[1], num_steps)
+        b = self.lin_interp(control_points[1], control_points[2], num_steps)
+        steps = torch.linspace(0, 1, self.steps)
+        return a + steps * (b - a)
     
     def _raster_base(self, curve, sigma=1e-2):
         tic = time()
@@ -356,6 +375,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--disable-cuda', action='store_true', help='')
 parser.add_argument('--display', action='store_true', help='')
 parser.add_argument('--debug', action='store_true', help='')
+parser.add_argument('--cubic', action='store_true', help='')
 parser.add_argument('--steps', default=128, type=int, help='')
 parser.add_argument('--res', default=512, type=int, help='')
 parser.add_argument('--method', default='base', help='')
@@ -370,11 +390,20 @@ print('Using device "{}"'.format(device))
 
 net = Bezier(res=args.res, steps=args.steps, method=args.method)
 
-control_points_l = [
-    [0.1, 0.1],
-    [0.9, 0.9],
-    [0.5, 0.9]
+if args.cubic:
+    control_points_l = [
+        [1.0, 0.0],
+        [0.21, 0.12],
+        [0.72, 0.83],
+        [0.0, 1.0]
     ]
+else:
+    control_points_l = [
+        [0.1, 0.1],
+        [0.9, 0.9],
+        [0.5, 0.9]
+    ]
+
 
 batch_size = 32
 control_points_batch = [control_points_l for i in range(batch_size)]
