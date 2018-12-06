@@ -38,13 +38,13 @@ python bezier.py --passes 100 --draw cubic --method <method> [--disable-cuda]
 
 |method         |forward  |backward |total    |speedup |peak_mem |
 |---------------|--------:|--------:|--------:|-------:|--------:|
-|base           |418.4 ms |449.0 ms |    ms   |1.00x   |N/A      |
-|cuda           |0.8 ms   |5.9 ms   |    ms   |        |942 MB   |
-|half           |0.9 ms   |4.4 ms   |    ms   |        |607 MB   |
-|bounded        |4.2 ms   |5.9 ms   |    ms   |        |486 MB   |
-|tiled          |13.6 ms  |12.2 ms  |    ms   |        |340 MB   |
-|shrunk_cpu     |15.9 ms  |136.4 ms |    ms   |        |N/A      |
-|shrunk_cuda    |18.2 ms  |22.9 ms  |    ms   |        |8 MB     |
+|base           |418.4 ms |449.0 ms |867.4 ms |1.00x   |N/A      |
+|cuda           |0.8 ms   |5.9 ms   |6.7 ms   |129.46x |942 MB   |
+|half           |0.9 ms   |4.4 ms   |5.3 ms   |163.66x |607 MB   |
+|bounded        |4.2 ms   |5.9 ms   |10.1 ms  |85.88x  |486 MB   |
+|tiled          |13.6 ms  |12.2 ms  |25.8 ms  |33.62x  |340 MB   |
+|shrunk_cpu     |15.9 ms  |136.4 ms |152.3 ms |5.70x   |N/A      |
+|shrunk_cuda    |18.2 ms  |22.9 ms  |41.1 ms  |21.10x  |8 MB     |
 
 comments: interpolation is cheap (number of points does not increase, but spacial coverage does)
 
