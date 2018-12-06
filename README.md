@@ -89,6 +89,7 @@ python bezier.py --passes 100 --batch <num_curves> --method <method> [--disable-
 
 ### Test 6: max_memory_allocated vs num_curves
 python bezier.py --passes 100 --batch <num_curves> --method <method>
+  
 |num_curves     |half     |tiled    |
 |---------------|--------:|--------:|
 |2              |0.9 GB   |0.3 GB   |
