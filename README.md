@@ -14,13 +14,10 @@ GCP n1-standard-8 VM : 2.2 GHz 8 vCPU Broadwell E5, 30GB RAM, Tesla V100
 |naive     |0.965s   |0.405s    |
 
 ## Experiments
-Averaged across 100 passes with params res=512, steps=128 on a GCP n1-standard-8 VM (2.2 GHz 8 core Broadwell E5, 30GB RAM, Tesla V100) running pytorch 0.4.1 with python 3.7, cuda 9.2, and cudnn 7.1.
-
-GCP n1-standard-8 instance with Tesla V100
-PyTorch 0.4.1 running with Python 3.7, CUDA 9.2.148, cuDNN 7.1
+GCP n1-standard-8 (2.2 GHz / 8 core Broadwell, 30GB RAM) instance with Tesla V100
+PyTorch 1.0.0 running with Python 3.7, CUDA 9.0, cuDNN 7.1
 res=512, steps=128
 
-The cuda algorithms are running on PyTorch 1.0.0, while the baseline numbers are from 0.4.1 since there seemed to be a massive performance degradation in 1.0.0
 
 ### Test 1: ms/iter, quadratic curve (100 passes)
 python bezier.py --passes 100 --method <method> [--disable-cuda]
