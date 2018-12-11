@@ -1,0 +1,13 @@
+\begin{tabular}{lrrrr}
+\hline
+ Method         &   Total (ms) &   Forward (ms) &   Backward (ms) &   GPU mem (GB) \\
+\hline
+ base           &       6683.7 &         2738.5 &          3945.2 &          0.000 \\
+ shrunk         &       1127.6 &           50.4 &          1077.2 &          0.000 \\
+ shrunk + cuda  &        152.7 &           60.6 &            92.1 &          0.018 \\
+ base + cuda    &         25.9 &            9.7 &            16.2 &          2.828 \\
+ half + cuda    &         23.3 &           13.4 &             9.9 &          1.421 \\
+ bounded + cuda &         20.3 &           10.5 &             9.8 &          1.064 \\
+ tiled + cuda   &         57.1 &           44.4 &            12.7 &          0.525 \\
+\hline
+\end{tabular}
