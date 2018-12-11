@@ -8,17 +8,20 @@ from torch.multiprocessing import Pool
 from time import time
 
 class Bezier(torch.nn.Module):
-    def __init__(self, res=512, steps=128, method='base'):
+    def __init__(self, res=512, steps=128, method='base', device='cpu', debug=False):
         super(Bezier, self).__init__()
         self.res = res
         self.steps = steps
+        self.method = method
+        self.device = device
+        self.debug = debug
 
         C, D = np.meshgrid(range(self.res), range(self.res))
         C_e = C[np.newaxis, :, :]
         D_e = D[np.newaxis, :, :]
-        
-        self.c = torch.Tensor(C_e / res).to(device)
-        self.d = torch.Tensor(D_e / res).to(device)
+         
+        self.c = torch.Tensor(C_e / res).to(self.device)
+        self.d = torch.Tensor(D_e / res).to(self.device)
 
         if method == 'base':
             self.raster = self._raster_base
@@ -33,6 +36,7 @@ class Bezier(torch.nn.Module):
         elif method == 'tiled':
             # break in to NxN tiles
             self.tiles = 4
+            self.tiles_t = torch.Tensor([self.tiles]).long()
             self.chunksize = self.res // self.tiles
 
             #  print(self.c)
@@ -53,8 +57,8 @@ class Bezier(torch.nn.Module):
             self.raster = self._raster_reindex_tiled
             self.lin_interp = self._lin_interp_base
 
-        #  if use_cuda:
-            #  torch.cuda.synchronize()
+        if device == 'cuda':
+            torch.cuda.synchronize()
         
     @staticmethod
     def _lin_interp_base(point1, point2, num_steps):
@@ -115,17 +119,17 @@ class Bezier(torch.nn.Module):
         y = curve[1]
         
         steps = curve.size()[1]
-        x_ = x.to(device).expand(self.res, self.res, steps)
-        y_ = y.to(device).expand(self.res, self.res, steps)
+        x_ = x.to(self.device).expand(self.res, self.res, steps)
+        y_ = y.to(self.device).expand(self.res, self.res, steps)
         c = torch.transpose(self.c.expand(steps, self.res, self.res), 0, 2)
         d = torch.transpose(self.d.expand(steps, self.res, self.res), 0, 2)
         
-        if args.debug:
+        if self.debug:
             print(time() - tic)
         
         raster = torch.exp((-(x_ - c)**2 - (y_ - d)**2) / (2*sigma**2))
         raster = torch.mean(raster, dim=2)
-        if args.debug:
+        if self.debug:
             print(time() - tic)
         
         return torch.transpose(torch.squeeze(raster), 0, 1)
@@ -137,19 +141,19 @@ class Bezier(torch.nn.Module):
         y = curve[1]
 
         steps = curve.size()[1]
-        x_ = x.to(device).half()
-        y_ = y.to(device).half()
+        x_ = x.to(self.device).half()
+        y_ = y.to(self.device).half()
         c = torch.transpose(self.c.expand(steps, self.res, self.res), 0, 2).half()
         d = torch.transpose(self.d.expand(steps, self.res, self.res), 0, 2).half()
-        #  c = torch.transpose(self.c.cpu().repeat(steps, 1, 1), 0, 2).half().to(device)
-        #  d = torch.transpose(self.d.cpu().repeat(steps, 1, 1), 0, 2).half().to(device)
+        #  c = torch.transpose(self.c.cpu().repeat(steps, 1, 1), 0, 2).half().to(self.device)
+        #  d = torch.transpose(self.d.cpu().repeat(steps, 1, 1), 0, 2).half().to(self.device)
         
-        if args.debug:
+        if self.debug:
             print(time() - tic)
         
         raster = torch.exp((-(x_ - c)**2 - (y_ - d)**2) / (2*sigma**2))
         raster = torch.mean(raster, dim=2)
-        if args.debug:
+        if self.debug:
             print(time() - tic)
         
         return torch.transpose(torch.squeeze(raster.float()), 0, 1)
@@ -160,12 +164,12 @@ class Bezier(torch.nn.Module):
         x = curve[0]
         y = curve[1]
 
-        x_ = x.expand(self.res, self.res, self.steps).to(device)
-        y_ = y.expand(self.res, self.res, self.steps).to(device)
+        x_ = x.expand(self.res, self.res, self.steps).to(self.device)
+        y_ = y.expand(self.res, self.res, self.steps).to(self.device)
         
         raster = torch.exp((-(x_ - c)**2 - (y_ - self.d) ** 2) / (2*sigma**2))
         raster = torch.mean(raster, dim=2)
-        if args.debug:
+        if self.debug:
             print(time() - tic)
         
         return torch.transpose(torch.squeeze(raster), 0, 1)
@@ -185,29 +189,29 @@ class Bezier(torch.nn.Module):
 
         #  x_ind = torch.arange((self.res * (x.min() - 3*sigma)).floor(), (self.res * (x.max() + 3*sigma)).ceil()).long()
         #  y_ind = torch.arange((self.res * (y.min() - 3*sigma)).floor(), (self.res * (y.max() + 3*sigma)).ceil()).long()
-        if args.debug:
+        if self.debug:
             print(time() - tic)
 
         
         w = xmax-xmin
         h = ymax-ymin
         
-        x_ = x.to(device).half()
-        y_ = y.to(device).half()
+        x_ = x.to(self.device).half()
+        y_ = y.to(self.device).half()
         
-        if args.debug:
+        if self.debug:
             print(time() - tic)
         c = torch.transpose(self.c.half().expand(steps, self.res, self.res), 0, 2)[xmin:xmax, ymin:ymax]
         d = torch.transpose(self.d.half().expand(steps, self.res, self.res), 0, 2)[xmin:xmax, ymin:ymax]
-        if args.debug:
+        if self.debug:
             print(time() - tic)
         raster_ = torch.exp((-(x_ - c)**2 - (y_ - d)**2) / (2*sigma**2))
         raster_ = torch.mean(raster_, dim=2)
-        if args.debug:
+        if self.debug:
             print(time() - tic)
-        raster = torch.zeros([self.res, self.res]).to(device)
+        raster = torch.zeros([self.res, self.res]).to(self.device)
         raster[xmin:xmax, ymin:ymax] = raster_
-        if args.debug:
+        if self.debug:
             print(time() - tic)
 
         return torch.transpose(torch.squeeze(raster.float()), 0, 1)
@@ -218,61 +222,74 @@ class Bezier(torch.nn.Module):
         x = curve[0]
         y = curve[1]
 
-        raster = torch.zeros([self.res, self.res]).half().to(device)
+        raster = torch.zeros([self.res, self.res]).half().to(self.device)
         
         steps = curve.size()[1]
-        x_ = x.to(device).half()
-        y_ = y.to(device).half()
+        x_ = x.to(self.device).half()
+        y_ = y.to(self.device).half()
         c = torch.transpose(self.c.expand(steps, self.res, self.res), 0, 2).half()
         d = torch.transpose(self.d.expand(steps, self.res, self.res), 0, 2).half()
         
-        #  x_ = x.to(device).expand(self.res, self.res, steps)
-        #  y_ = y.to(device).expand(self.res, self.res, steps)
-        #  #  x_ = x.to(device).expand(self.res, self.res, steps).reshape(-1, self.chunksize, self.chunksize, steps)
-        #  #  y_ = y.to(device).expand(self.res, self.res, steps).reshape(-1, self.chunksize, self.chunksize, steps)
+        #  x_ = x.to(self.device).expand(self.res, self.res, steps)
+        #  y_ = y.to(self.device).expand(self.res, self.res, steps)
+        #  #  x_ = x.to(self.device).expand(self.res, self.res, steps).reshape(-1, self.chunksize, self.chunksize, steps)
+        #  #  y_ = y.to(self.device).expand(self.res, self.res, steps).reshape(-1, self.chunksize, self.chunksize, steps)
         bound = int(self.res * 3 * sigma)
-        tiles = [[] for t in range(self.tiles**2)]
-        for i, (x, y) in enumerate(torch.t(curve)):
-            xp = int(x * self.res)
-            yp = int(y * self.res)
-            xt = min(self.tiles-1, xp // self.chunksize)
-            yt = min(self.tiles-1, yp // self.chunksize)
-            tiles[self.tiles * yt + xt].append(i)
-            if xt < self.tiles - 1 and xp + bound >= (xt + 1) * self.chunksize:
-                tiles[self.tiles * yt + xt + 1].append(i)
-            if xt > 0 and xp - bound < xt * self.chunksize:
-                tiles[self.tiles * yt + xt - 1].append(i)
-            if yt < self.tiles - 1 and yp + bound >= (yt + 1) * self.chunksize:
-                tiles[self.tiles * yt + self.tiles + xt].append(i)
-            if yt > 0 and yp - bound < yt * self.chunksize:
-                tiles[self.tiles * yt - self.tiles + xt].append(i)
-        torch.cuda.synchronize()
+
+        curve_px = (curve * self.res).long()
+        x_px, y_px = curve_px[0], curve_px[1]
+        curve_tile = torch.min((curve_px / self.chunksize), self.tiles_t-1)
+        x_tile, y_tile = curve_tile[0], curve_tile[1]
+        tiles = self.tiles * y_tile + x_tile
+        right_tiles = tiles[(x_tile < self.tiles - 1) & (x_px + bound >= (x_tile + 1) * self.chunksize)] + 1
+        left_tiles = tiles[(x_tile > 0) & (x_px - bound < x_tile * self.chunksize)] - 1
+        top_tiles = tiles[(y_tile < self.tiles - 1) & (y_px + bound >= (y_tile + 1) * self.chunksize)] + self.tiles
+        bottom_tiles = tiles[(y_tile > 0) & (y_px - bound < y_tile * self.chunksize)] - self.tiles
+        #  tiles = self.tiles * y_tile + x_tile - 1
+        #  tiles = self.tiles * y_tile + x_tile - 1
+        #  tiles = self.tiles * y_tile + x_tile + 1
+        #  tiles = self.tiles * y_tile + x_tile + 1
+
+        #  for i, (x, y) in enumerate(torch.t(curve)):
+            #  xp = int(x * self.res)
+            #  yp = int(y * self.res)
+            #  xt = min(self.tiles-1, xp // self.chunksize)
+            #  yt = min(self.tiles-1, yp // self.chunksize)
+            #  tiles[self.tiles * yt + xt].append(i)
+            #  if xt < self.tiles - 1 and xp + bound >= (xt + 1) * self.chunksize:
+                #  tiles[self.tiles * yt + xt + 1].append(i)
+            #  if xt > 0 and xp - bound < xt * self.chunksize:
+                #  tiles[self.tiles * yt + xt - 1].append(i)
+            #  if yt < self.tiles - 1 and yp + bound >= (yt + 1) * self.chunksize:
+                #  tiles[self.tiles * yt + self.tiles + xt].append(i)
+            #  if yt > 0 and yp - bound < yt * self.chunksize:
+                #  tiles[self.tiles * yt - self.tiles + xt].append(i)
         for tile, stream in enumerate(self.streams):
-            if len(tiles[tile]) > 0:
+            steps_in_tile = (tiles == tile).nonzero().reshape(-1)
+            if steps_in_tile.size()[0] > 0:
                 with torch.cuda.stream(stream):
-                    tileidx = torch.Tensor(tiles[tile]).long()
                     y_tile, x_tile = divmod(tile, self.tiles)
                     x_idx = self.chunksize * x_tile
                     y_idx = self.chunksize * y_tile
-                    xi = x_[tileidx]
-                    yi = y_[tileidx]
-                    ci = c[x_idx:x_idx+self.chunksize, y_idx:y_idx+self.chunksize, tileidx]
-                    di = d[x_idx:x_idx+self.chunksize, y_idx:y_idx+self.chunksize, tileidx]
+                    xi = x_[steps_in_tile]
+                    yi = y_[steps_in_tile]
+                    ci = c[x_idx:x_idx+self.chunksize, y_idx:y_idx+self.chunksize, steps_in_tile]
+                    di = d[x_idx:x_idx+self.chunksize, y_idx:y_idx+self.chunksize, steps_in_tile]
                     raster_ = torch.exp((-(xi - ci)**2 - (yi - di)**2) / (2*sigma**2))
                     raster_ = torch.mean(raster_, dim=2)
+                    raster[x_idx:x_idx+self.chunksize, y_idx:y_idx+self.chunksize] = raster_
         torch.cuda.synchronize()
-        raster[x_idx:x_idx+self.chunksize, y_idx:y_idx+self.chunksize] = raster_
 
         #  torch.multiprocessing.set_start_method('spawn')
         #  pool = Pool(N**2)
         #  pool.map(stream_fn, range(N**2))
         #  print(c_.size())
         
-        if args.debug:
+        if self.debug:
             print(time() - tic)
         
-        #  x_ = x.to(device).expand(self.res, self.res, steps)
-        #  y_ = y.to(device).expand(self.res, self.res, steps)
+        #  x_ = x.to(self.device).expand(self.res, self.res, steps)
+        #  y_ = y.to(self.device).expand(self.res, self.res, steps)
         #  raster = torch.exp((-(x_ - self.c)**2 - (y_ - self.d)**2) / (2*sigma**2))
         #  raster = torch.mean(raster, dim=2)
         
@@ -284,15 +301,15 @@ class Bezier(torch.nn.Module):
         x = curve[0]
         y = curve[1]
 
-        raster = torch.zeros([self.res, self.res]).to(device)
+        raster = torch.zeros([self.res, self.res]).to(self.device)
         
         r = x + 3*sigma
         l = x - 3*sigma
         b = y - 3*sigma
         t = y - 3*sigma
         
-        x_ = x.to(device).expand(self.res, self.res, steps).reshape(-1, self.chunksize, self.chunksize, steps)
-        y_ = y.to(device).expand(self.res, self.res, steps).reshape(-1, self.chunksize, self.chunksize, steps)
+        x_ = x.to(self.device).expand(self.res, self.res, steps).reshape(-1, self.chunksize, self.chunksize, steps)
+        y_ = y.to(self.device).expand(self.res, self.res, steps).reshape(-1, self.chunksize, self.chunksize, steps)
         
         torch.cuda.synchronize()
         for tile, stream in enumerate(self.streams[:2]):
@@ -313,7 +330,7 @@ class Bezier(torch.nn.Module):
         # align start and end points
         theta = torch.atan(curve[1, -1] / curve[0, -1])
         print(theta)
-        R = torch.Tensor([[theta.cos(), theta.sin()], [-theta.sin(), theta.cos()]]).to(device)
+        R = torch.Tensor([[theta.cos(), theta.sin()], [-theta.sin(), theta.cos()]]).to(self.device)
         
         T = curve[:, 0].expand(steps, 2).transpose(0, 1)
         curve -= T
@@ -340,7 +357,7 @@ class Bezier(torch.nn.Module):
         raster = torch.zeros([2*self.res, 2*self.res])
         raster[self.res+xmin:self.res+xmax, self.res+ymin:self.res+ymax] = raster_
 
-        if args.debug:
+        if self.debug:
             print(time() - tic)
 
         return torch.transpose(torch.squeeze(raster), 0, 1)
@@ -354,11 +371,11 @@ class Bezier(torch.nn.Module):
         
         steps = curve.size()[1]
         
-        raster = torch.zeros([self.res, self.res], requires_grad=False).to(device)
+        raster = torch.zeros([self.res, self.res], requires_grad=False).to(self.device)
         spread = 2 * sigma
         # nextpow2 above 2 standard deviations in both x and y
         w = 2*int(2**np.ceil(np.log2(self.res*spread)))
-        if args.debug:
+        if self.debug:
             print(w)
         # lower left corner of a w*w block centered on each point of the curve
         blocks = torch.clamp((self.res * curve).floor().int() - w // 2, 0,  self.res - w)
@@ -390,21 +407,21 @@ class Bezier(torch.nn.Module):
         #  for t, (px, py) in enumerate(torch.t(blocks)):
             #  c[:,:,t] = self.c[px:px+w, py:py+w, t]
             #  d[:,:,t] = self.d[px:px+w, py:py+w, t]
-        if args.debug:
+        if self.debug:
             print('{}: Bounding rectangles found.'.format(time() - tic))
-        x_ = x.to(device).expand(w, w, steps)
-        y_ = y.to(device).expand(w, w, steps)
+        x_ = x.to(self.device).expand(w, w, steps)
+        y_ = y.to(self.device).expand(w, w, steps)
         c_ = torch.transpose(self.c.expand(steps, self.res, self.res), 0, 2)
         d_ = torch.transpose(self.d.expand(steps, self.res, self.res), 0, 2)
-        c = torch.stack([c_[px:px+w, py:py+w, t] for t, (px, py) in enumerate(torch.t(blocks))], dim=2).to(device)
-        d = torch.stack([d_[px:px+w, py:py+w, t] for t, (px, py) in enumerate(torch.t(blocks))], dim=2).to(device)
-        if args.debug:
+        c = torch.stack([c_[px:px+w, py:py+w, t] for t, (px, py) in enumerate(torch.t(blocks))], dim=2).to(self.device)
+        d = torch.stack([d_[px:px+w, py:py+w, t] for t, (px, py) in enumerate(torch.t(blocks))], dim=2).to(self.device)
+        if self.debug:
             print('{}: Bounding rectangles found.'.format(time() - tic))
-        if args.debug:
+        if self.debug:
             print('{}: Dims expanded.'.format(time() - tic))
         raster_ = torch.exp((-(x_ - c)**2 - (y_ - d)**2) / (2*sigma**2))
         # raster_ = (x_ - c)**2 + (y_ - d)**2
-        if args.debug:
+        if self.debug:
             print('{}: Gradient generated.'.format(time() - tic))
         #  idx = torch.LongTensor
         #  self.r.scatter_(2, raster_)
@@ -426,135 +443,138 @@ class Bezier(torch.nn.Module):
             #  raster_ = torch.exp((-(x_ - c)**2 - (y_ - d) ** 2) / (2*sigma**2))
             #  raster_ = torch.mean(raster_, dim=2)
             #  raster[xmin:xmax, ymin:ymax] = raster_
-        if args.debug:
+        if self.debug:
             print('{}: Rasterized.'.format(time() - tic))
         
         return torch.transpose(torch.squeeze(raster), 0, 1)
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--disable-cuda', action='store_true', help='')
-parser.add_argument('--display', action='store_true', help='')
-parser.add_argument('--debug', action='store_true', help='')
-parser.add_argument('--cubic', action='store_true', help='')
-parser.add_argument('--steps', default=128, type=int, help='')
-parser.add_argument('--res', default=512, type=int, help='')
-parser.add_argument('--method', default='base', help='')
-parser.add_argument('--draw', default='quadratic', help='')
-parser.add_argument('--batch', default=1, type=int, help='')
-#  parser.add_argument('--batches', nargs='*', default=[16], type=int, help='')
-parser.add_argument('--passes', default=1, type=int, help='')
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--disable-cuda', action='store_true', help='')
+    parser.add_argument('--display', action='store_true', help='')
+    parser.add_argument('--debug', action='store_true', help='')
+    parser.add_argument('--cubic', action='store_true', help='')
+    parser.add_argument('--steps', default=128, type=int, help='')
+    parser.add_argument('--res', default=512, type=int, help='')
+    parser.add_argument('--method', default='base', help='')
+    parser.add_argument('--draw', default='quadratic', help='')
+    parser.add_argument('--batch', default=1, type=int, help='')
+    #  parser.add_argument('--batches', nargs='*', default=[16], type=int, help='')
+    parser.add_argument('--passes', default=1, type=int, help='')
 
-args = parser.parse_args()
+    args = parser.parse_args()
 
-use_cuda = not args.disable_cuda and torch.cuda.is_available()
-device = torch.device("cuda" if use_cuda else "cpu")
-print('Using device "{}"'.format(device))
-#  torch.set_default_tensor_type(torch.cuda.HalfTensor if use_cuda else torch.FloatTensor)
+    use_cuda = not args.disable_cuda and torch.cuda.is_available()
+    device = torch.device("cuda" if use_cuda else "cpu")
+    print('Using device "{}"'.format(device))
+    #  torch.set_default_tensor_type(torch.cuda.HalfTensor if use_cuda else torch.FloatTensor)
 
-net = Bezier(res=args.res, steps=args.steps, method=args.method)
+    net = Bezier(res=args.res, steps=args.steps, method=args.method, device=device)
 
-if args.draw == 'quadratic':
-    control_points_l = [[
-        [0.1, 0.1],
-        [0.9, 0.9],
-        [0.5, 0.9]
-    ]]
-elif args.draw == 'cubic':
-    control_points_l = [[
-        [1.0, 0.0],
-        [0.21, 0.12],
-        [0.72, 0.83],
-        [0.0, 1.0]
-    ]]
-
-elif args.draw == 'char':
-    #  <point x="166" y="1456" type="line"/>
-    #  <point x="166" y="0" type="line"/>
-    #  <point x="374" y="0" type="line"/>
-    #  <point x="374" y="1289" type="line"/>
-    #  <point x="650" y="1289" type="line" smooth="yes"/>
-    #  <point x="868" y="1289"/>
-    #  <point x="956" y="1180"/>
-    #  <point x="956" y="1017" type="curve" smooth="yes"/>
-    #  <point x="956" y="869"/>
-    #  <point x="854" y="753"/>
-    #  <point x="651" y="753" type="curve" smooth="yes"/>
-    #  <point x="327" y="753" type="line"/>
-    #  <point x="329" y="587" type="line"/>
-    #  <point x="770" y="587" type="line"/>
-    #  <point x="827" y="609" type="line"/>
-    #  <point x="1039" y="666"/>
-    #  <point x="1164" y="818"/>
-    #  <point x="1164" y="1017" type="curve" smooth="yes"/>
-    #  <point x="1164" y="1303"/>
-    #  <point x="983" y="1456"/>
-    #  <point x="650" y="1456" type="curve" smooth="yes"/>
-    from fontTools.ttLib import TTFont
-    font = TTFont('fonts/apache/roboto/Roboto-Regular.ttf')
-    control_points_l = [
-        [
+    if args.draw == 'quadratic':
+        control_points_l = [[
             [0.1, 0.1],
             [0.9, 0.9],
             [0.5, 0.9]
-        ],
-        [
-            [0.5, 0.9],
-            [0.1, 0.9],
-            [0.3, 0.3]
-        ],
-        [
-            [0.3, 0.3],
-            [0.9, 0.9],
-            [0.9, 0.1]
-        ],
-    ]
-if args.batch:
-    control_points_l = control_points_l * args.batch
+        ]]
+    elif args.draw == 'cubic':
+        control_points_l = [[
+            [1.0, 0.0],
+            [0.21, 0.12],
+            [0.72, 0.83],
+            [0.0, 1.0]
+        ]]
 
-#  control_points_batch = control_points_l * batch_size
-# print(torch.Tensor(np.array(control_points_batch)).size())
+    elif args.draw == 'char':
+        #  <point x="166" y="1456" type="line"/>
+        #  <point x="166" y="0" type="line"/>
+        #  <point x="374" y="0" type="line"/>
+        #  <point x="374" y="1289" type="line"/>
+        #  <point x="650" y="1289" type="line" smooth="yes"/>
+        #  <point x="868" y="1289"/>
+        #  <point x="956" y="1180"/>
+        #  <point x="956" y="1017" type="curve" smooth="yes"/>
+        #  <point x="956" y="869"/>
+        #  <point x="854" y="753"/>
+        #  <point x="651" y="753" type="curve" smooth="yes"/>
+        #  <point x="327" y="753" type="line"/>
+        #  <point x="329" y="587" type="line"/>
+        #  <point x="770" y="587" type="line"/>
+        #  <point x="827" y="609" type="line"/>
+        #  <point x="1039" y="666"/>
+        #  <point x="1164" y="818"/>
+        #  <point x="1164" y="1017" type="curve" smooth="yes"/>
+        #  <point x="1164" y="1303"/>
+        #  <point x="983" y="1456"/>
+        #  <point x="650" y="1456" type="curve" smooth="yes"/>
+        from fontTools.ttLib import TTFont
+        font = TTFont('fonts/apache/roboto/Roboto-Regular.ttf')
+        control_points_l = [
+            [
+                [0.1, 0.1],
+                [0.9, 0.9],
+                [0.5, 0.9]
+            ],
+            [
+                [0.5, 0.9],
+                [0.1, 0.9],
+                [0.3, 0.3]
+            ],
+            [
+                [0.3, 0.3],
+                [0.9, 0.9],
+                [0.9, 0.1]
+            ],
+        ]
+    if args.batch:
+        control_points_l = control_points_l * args.batch
 
-control_points_t = Variable(torch.Tensor(np.array(control_points_l)), requires_grad=True)
+    #  control_points_batch = control_points_l * batch_size
+    # print(torch.Tensor(np.array(control_points_batch)).size())
 
-elapsed_fw, elapsed_bw = 0, 0
+    control_points_t = Variable(torch.Tensor(np.array(control_points_l)), requires_grad=True)
 
-passes = args.passes
-crit = torch.nn.L1Loss().cuda()
-tic_total = time()
-memory_cached, memory_allocated = 0, 0
-for i in range(passes):
-    tic = time()
-    curve = net.forward(control_points_t)
-    torch.cuda.synchronize()
-    elapsed_fw += time() - tic
-    #  print('{}: Total.'.format(time() - tic))
-    loss = crit(curve, curve.clone().detach())
-    tic = time()
-    #  print('{}: Loss.'.format(time() - tic))
-    loss.backward()
-    torch.cuda.synchronize()
-    elapsed_bw += time() - tic
-    if use_cuda:
-        memory_allocated = torch.cuda.max_memory_allocated()
-        memory_cached = torch.cuda.max_memory_cached()
+    elapsed_fw, elapsed_bw = 0, 0
 
-    #  print('{}: Backwards.'.format(time() - tic))
+    passes = args.passes
+    crit = torch.nn.L1Loss().cuda()
+    tic_total = time()
+    memory_cached, memory_allocated = 0, 0
+    for i in range(passes):
+        tic = time()
+        curve = net.forward(control_points_t)
+        if use_cuda:
+            torch.cuda.synchronize()
+        elapsed_fw += time() - tic
+        #  print('{}: Total.'.format(time() - tic))
+        loss = crit(curve, curve.clone().detach())
+        tic = time()
+        #  print('{}: Loss.'.format(time() - tic))
+        loss.backward()
+        if use_cuda:
+            torch.cuda.synchronize()
+        elapsed_bw += time() - tic
+        if use_cuda:
+            memory_allocated = torch.cuda.max_memory_allocated()
+            memory_cached = torch.cuda.max_memory_cached()
 
-elapsed = time() - tic_total
-print('forwards:  {:4d} passes in {:7.3f} seconds [{:8.3f} iter/s {:>5.1f} ms/iter].'
-        .format(passes, elapsed_fw, passes/elapsed_fw, elapsed_fw/passes * 1e3))
-print('backwards: {:4d} passes in {:7.3f} seconds [{:8.3f} iter/s {:>5.1f} ms/iter].'
-        .format(passes, elapsed_bw, passes/elapsed_bw, elapsed_bw/passes * 1e3))
-print('total:     {:4d} passes in {:7.3f} seconds [{:8.3f} iter/s {:>5.1f} ms/iter].'
-        .format(passes, elapsed, passes/elapsed, elapsed/passes * 1e3))
-print('memusage:  {:5d} MB allocated, {:5d} MB cached.'
-        .format(int(memory_allocated // 1e6), int(memory_cached // 1e6)))
+        #  print('{}: Backwards.'.format(time() - tic))
 
-curve_ = curve.data.cpu().numpy()
+    elapsed = time() - tic_total
+    print('forwards:  {:4d} passes in {:7.3f} seconds [{:8.3f} iter/s {:>5.1f} ms/iter].'
+            .format(passes, elapsed_fw, passes/elapsed_fw, elapsed_fw/passes * 1e3))
+    print('backwards: {:4d} passes in {:7.3f} seconds [{:8.3f} iter/s {:>5.1f} ms/iter].'
+            .format(passes, elapsed_bw, passes/elapsed_bw, elapsed_bw/passes * 1e3))
+    print('total:     {:4d} passes in {:7.3f} seconds [{:8.3f} iter/s {:>5.1f} ms/iter].'
+            .format(passes, elapsed, passes/elapsed, elapsed/passes * 1e3))
+    print('memusage:  {:5d} MB allocated, {:5d} MB cached.'
+            .format(int(memory_allocated // 1e6), int(memory_cached // 1e6)))
 
-if args.display:
-    import matplotlib
-    matplotlib.use('tkagg')
-    import matplotlib.pyplot as plt
-    plt.matshow(curve_)
-    plt.show()
+    curve_ = curve.data.cpu().numpy()
+
+    if args.display:
+        import matplotlib
+        matplotlib.use('tkagg')
+        import matplotlib.pyplot as plt
+        plt.matshow(curve_)
+        plt.show()
