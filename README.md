@@ -28,12 +28,12 @@ python bezier.py --passes 100 --method <method> [--disable-cuda]
 |method         |forward  |backward |total    |speedup |peak_mem |
 |---------------|--------:|--------:|--------:|-------:|--------:|
 |base           |414.9 ms |448.4 ms |863.3 ms |1.00x   |N/A      |
-|cuda           |3.1 ms   |5.7 ms   |8.8 ms   |        |942 MB   |
-|half           |2.7 ms   |3.6 ms   |6.3 ms   |        |472 MB   |
-|bounded        |1.9 ms   |2.5 ms   |4.3 ms   |        |245 MB   |
-|tiled          |9.4 ms   |2.0 ms   |11.4 ms  |        |153 MB   |
-|shrunk_cpu     |16.2 ms  |142.5 ms |    ms   |        |N/A      |
-|shrunk_cuda    |18.3 ms  |22.9 ms  |    ms   |        |8 MB     |
+|cuda           |3.1 ms   |5.7 ms   |8.8 ms   |98.10x  |942 MB   |
+|half           |2.7 ms   |3.6 ms   |6.3 ms   |137.03x |472 MB   |
+|bounded        |1.9 ms   |2.5 ms   |4.3 ms   |196.20x |245 MB   |
+|tiled          |9.4 ms   |2.0 ms   |11.4 ms  |75.73x  |153 MB   |
+|shrunk_cpu     |16.2 ms  |142.5 ms |158.7 ms |5.44x   |N/A      |
+|shrunk_cuda    |18.3 ms  |22.9 ms  |41.2 ms  |20.95x  |8 MB     |
 
 ### Test 2: ms/iter cubic curve (100 passes)
 python bezier.py --passes 100 --draw cubic --method <method> [--disable-cuda]
@@ -41,11 +41,11 @@ python bezier.py --passes 100 --draw cubic --method <method> [--disable-cuda]
 |method         |forward  |backward |total    |speedup |peak_mem |
 |---------------|--------:|--------:|--------:|-------:|--------:|
 |base           |418.4 ms |449.0 ms |867.4 ms |1.00x   |N/A      |
-|cuda           |3.3 ms   |6.1 ms   |9.4 ms   |        |942 MB   |
-|half           |2.9 ms   |4.0 ms   |6.9 ms   |        |472 MB   |
-|bounded        |2.9 ms   |4.2 ms   |7.1 ms   |        |472 MB   |
-|tiled          |10.4 ms  |2.3 ms   |12.7 ms  |        |148 MB   |
-|shrunk_cuda    |18.2 ms  |22.9 ms  |    ms   |        |8 MB     |
+|cuda           |3.3 ms   |6.1 ms   |9.4 ms   |92.28x  |942 MB   |
+|half           |2.9 ms   |4.0 ms   |6.9 ms   |125.71x |472 MB   |
+|bounded        |2.9 ms   |4.2 ms   |7.1 ms   |122.17x |472 MB   |
+|tiled          |10.4 ms  |2.3 ms   |12.7 ms  |68.30x  |148 MB   |
+|shrunk_cuda    |18.2 ms  |22.9 ms  |41.1 ms  |21.10x  |8 MB     |
 
 comments: interpolation is cheap (number of points does not increase, but spacial coverage does)
 
@@ -55,12 +55,12 @@ python bezier.py --passes 100 --draw char --method <method> [--disable-cuda]
 |method         |forward  |backward |total    |speedup |peak_mem |
 |---------------|--------:|--------:|--------:|-------:|--------:|
 |base           |1131.9 ms|1217.5 ms|2349.4 ms|1.00x   |N/A      |
-|cuda           |8.9 ms   |15.8 ms  |24.7 ms  |        |2821 MB  |
-|half           |7.4 ms   |9.4 ms   |16.8 ms  |        |1412 MB  |
-|bounded        |5.3 ms   |7.9 ms   |13.2 ms  |        |1053 MB  |
-|tiled          |20.1 ms  |2.7 ms   |22.8 ms  |        |434 MB  |
-|shrunk_cpu     |48.8 ms  |383.8 ms |    ms   |        |N/A      |
-|shrunk_cuda    |55.9 ms  |69.7 ms  |    ms   |        |15 MB    |
+|cuda           |8.9 ms   |15.8 ms  |24.7 ms  |95.12x  |2821 MB  |
+|half           |7.4 ms   |9.4 ms   |16.8 ms  |139.85x |1412 MB  |
+|bounded        |5.3 ms   |7.9 ms   |13.2 ms  |177.98x |1053 MB  |
+|tiled          |20.1 ms  |2.7 ms   |22.8 ms  |130.04x |434 MB   |
+|shrunk_cpu     |48.8 ms  |383.8 ms |432.6 ms |5.43x   |N/A      |
+|shrunk_cuda    |55.9 ms  |69.7 ms  |125.6 ms |18.71x  |15 MB    |
 
 ### Test 4: ms/iter 16 section composite quadratic curve (100 passes)
 NOT UP TO DATE
@@ -89,6 +89,7 @@ python bezier.py --passes 100 --batch <num_curves> --method <method> [--disable-
 
 ### Test 6: max_memory_allocated vs num_curves
 python bezier.py --passes 100 --batch <num_curves> --method <method>
+  
 |num_curves     |half     |tiled    |
 |---------------|--------:|--------:|
 |2              |0.9 GB   |0.3 GB   |
