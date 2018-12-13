@@ -35,3 +35,51 @@ ks
             we also do an initial pass to collect the points that (together with its normal dist) cross the boundary of the tile
                 this way, we can ignore the tiles that do not contain any points
                 and each operation in the tile results in a tile_size * tile_size * points_in_tile operation instead of the original res * res * total_points
+
+FINAL
+
+Slide 1 [title]
+Fast differentiable bezier curve rasterizer
+
+Slide 2 [bezier intro]
+What is a bezier curve? Vector curve defined by control points.
+What is rasterization? In order to render the curve onto a display with a finite resolution, pixels that fall on the curve must be determined. 
+Font glyphs - TrueType fonts are defined as a combination of quadratic bezier curves (with 3 control points each)
+Tons of different algorithms are part of every modern graphics pipeline.
+Our project - make it differentiable and fast so it can be used as a building block in gradient based methods like optimization / deep learning.
+application - reverse rendering, you can use this in a generative model, and find the control points that define a generated glyph.
+
+Slides X [curves]
+show curve examples, describe
+describe how to rasterize a bezier curve - either use iterative pixel based methods, or what many modern libraries do (skia etc) simply find points distributed along the curve, and use very hardware optimized straight line drawing algorithms to form an approximate curve. Instead of that, we need gradient information - draw a gaussian at each point and superimpose them to get a smooth, differentiable function with good gradient information.
+
+Benchmark slides
+Naive technique as described above is very slow, running on the CPU in vectorized Torch code.
+It is also very memory intensive, its doing a lot of unnecessary operations off of the curve.
+Solution? only do operations along the curve, on a square around each point. (raster_shrunk), this greatly reduces memory consumption, but is still slow.
+Move the tensors onto the GPU, speeds it up a bit.
+
+This is launching so many kernels (proportional to the number of points) and stressing the CPU-GPU connections, that the cost is not really worth it.
+
+GPU is always a tradeoff between embarrasingly parallel operations and the overhead associated with moving data between the CPU and GPU. You want an algorithm that can effectively leverage a few massively parallel GPU operations, and than move it back to the CPU. Also any operations that can be done on the CPU while the GPU is working is essentially free cycles.
+
+test the original naive implementation (one big multiply) in cuda, while finding the points on the CPU
+    massive speedup, even with the "wasted" operations
+
+profiled, benchmarked - speed further increased by replacing slow operations (certain calls to expand with certain array sizes perform very poorly do to bad cache/memory access patters, replaced these with much faster array broadcasting ops), and doing all the calculations in half precision. (which also results in lower memory usage by a constant factor)
+
+only need to calculate at the point the region the curve covers-draw a bounding box and calculate only with that
+    for many curves, the cost of indexing and finding these bounds is passed by the savings from reducing multiplies
+    
+slide cubic
+but this doesn't really help when the curve covers most of the canvas, and the memory usage still scales horribly.
+if you need to render a composition of many bezier curves, you might have to break it into smaller parts
+
+tiled
+you want to effectively perform your rasterization at points along the curve, but this incurs a not insignificant cost in finding these regions. How can we do this?
+break the canvas in to NxN square tiles
+find the points (along with the gradient function) the needs to be rastered in that square, which can be done with a simple bounds check
+executed the multiply for each of these in parallel in cuda streams on SM processors
+- only need to render in the squares that contain points/gradient information (more squares = tighter bounds but more indexing overhead)
+    done asynchrounously so memory usage is much less.
+    big performance boost on composite curves / glyphs, still reasonable performance on simple curves

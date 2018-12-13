@@ -12,6 +12,7 @@ from tabulate import tabulate
 from time import time
 
 from bezier import Bezier
+import utils
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--save-plot', action='store_true', help='save plot of benchmark results')
@@ -58,38 +59,23 @@ def benchmark(net, input, passes):
 cpu_methods = ['base', 'shrunk']
 cuda_methods = ['shrunk', 'base', 'half', 'bounded', 'tiled']
 test_curves = {
-    'quadratic':  [
-        [
-            [0.1, 0.1],
-            [0.9, 0.9],
-            [0.5, 0.9]
-        ]
-    ],
-    'cubic': [
-        [
-            [1.0, 0.0],
-            [0.21, 0.12],
-            [0.72, 0.83],
-            [0.0, 1.0]
-        ]
-    ],
-    'composite': [
-        [
-            [0.1, 0.1],
-            [0.9, 0.9],
-            [0.5, 0.9]
-        ],
-        [
-            [0.5, 0.9],
-            [0.1, 0.9],
-            [0.3, 0.3]
-        ],
-        [
-            [0.3, 0.3],
-            [0.9, 0.9],
-            [0.9, 0.1]
-        ],
-    ]
+    #  'quadratic':  [
+        #  [
+            #  [0.1, 0.1],
+            #  [0.9, 0.9],
+            #  [0.5, 0.9]
+        #  ]
+    #  ],
+    #  'cubic': [
+        #  [
+            #  [1.0, 0.0],
+            #  [0.21, 0.12],
+            #  [0.72, 0.83],
+            #  [0.0, 1.0]
+        #  ]
+    #  ],
+    #  'glyph-A': utils.load_glyph(26, scale=1.5),
+    'glyph-a': utils.load_glyph(0, scale=1.5)
 }
 
 save_dir = './benchmarks'

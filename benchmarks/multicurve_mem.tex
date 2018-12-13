@@ -1,0 +1,13 @@
+\begin{tabular}{lrrrr}
+\hline
+ Method         &   N=2 (ms) &   N=4 (ms) &   N=8 (ms) &   N=16 (ms) \\
+\hline
+ base           &      0.000 &      0.000 &      0.000 &       0.000 \\
+ shrunk         &      0.000 &      0.000 &      0.000 &       0.000 \\
+ shrunk + cuda  &      0.015 &      0.027 &      0.040 &       0.071 \\
+ base + cuda    &      1.888 &      3.770 &      7.530 &      15.048 \\
+ half + cuda    &      0.957 &      1.899 &      3.780 &       7.540 \\
+ bounded + cuda &      0.510 &      0.995 &      1.964 &       3.898 \\
+ tiled + cuda   &      0.263 &      0.467 &      0.884 &       1.732 \\
+\hline
+\end{tabular}

@@ -6,12 +6,12 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
-import pickle
 from torch.autograd import Variable
 from torch.multiprocessing import Pool
 from time import time
 
 from bezier import Bezier
+import utils
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--disable-cuda', action='store_true', help='')
@@ -72,17 +72,8 @@ elif args.draw == 'composite':
         ],
     ]
 elif args.draw == 'char':
-    A = pickle.load(open("./fonts/arial.quadratic","rb"))
-    B = 0 #letter chooser
-    C = 1.5 #scaling
-    D = np.max(A[B])
-    control_points_l = np.zeros((len(A[B][0]),len(A[B]),2))
-    k = -1
-    for i in A[B]:
-        k += 1
-        for j in range(len(i)):
-            control_points_l[j][k][0] = A[B][k][j][0]/C/D+(C-1)/C/2
-            control_points_l[j][k][1] = 1-(A[B][k][j][1]/C/D+(C-1)/C/2)
+    control_points_l = utils.load_glyph(26, scale=1.5)
+    print(control_points_l.shape)
 if args.batch:
     control_points_l = control_points_l * args.batch
 
@@ -133,6 +124,7 @@ if args.display:
     sns.set()
     sns.set_style('white')
     #  sns.set_palette('Reds')
+    #  sns.heatmap(curve_, cmap='Greys', vmin=0, vmax=1)
     sns.heatmap(curve_, cmap='Greys')
     #  plt.matshow(curve_)
     plt.show()
