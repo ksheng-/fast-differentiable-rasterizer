@@ -41,8 +41,9 @@ FINAL
 Slide 1 [title]
 Fast differentiable bezier curve rasterizer
 
-Slide 2 [bezier intro]
+[explain curves on board]
 What is a bezier curve? Vector curve defined by control points.
+
 What is rasterization? In order to render the curve onto a display with a finite resolution, pixels that fall on the curve must be determined. 
 Font glyphs - TrueType fonts are defined as a combination of quadratic bezier curves (with 3 control points each)
 Tons of different algorithms are part of every modern graphics pipeline.
@@ -51,6 +52,8 @@ application - reverse rendering, you can use this in a generative model, and fin
 
 Slides X [curves]
 show curve examples, describe
+heres a quadratic bezier - 3 points
+heres a cubic bezier - 4 points
 describe how to rasterize a bezier curve - either use iterative pixel based methods, or what many modern libraries do (skia etc) simply find points distributed along the curve, and use very hardware optimized straight line drawing algorithms to form an approximate curve. Instead of that, we need gradient information - draw a gaussian at each point and superimpose them to get a smooth, differentiable function with good gradient information.
 
 Benchmark slides

@@ -56,8 +56,8 @@ def benchmark(net, input, passes):
         curve_ = curve.data.cpu().numpy()
 
 
-cpu_methods = ['base', 'shrunk']
-cuda_methods = ['shrunk', 'base', 'half', 'bounded', 'tiled']
+cpu_methods = ['shrunk']
+cuda_methods = ['shrunk', 'bounded', 'tiled']
 test_curves = {
     #  'quadratic':  [
         #  [
@@ -93,7 +93,7 @@ for curve, control_points in test_curves.items():
         net = Bezier(res=args.res, steps=args.steps, method=method, device=device, debug=args.debug)
         if use_cuda:
             torch.cuda.empty_cache()
-        results.append(benchmark(net, control_points_t, 10))
+        results.append(benchmark(net, control_points_t, 1))
     for method in cuda_methods:
         device = torch.device('cuda' if use_cuda else 'cpu')
         print('Measuring algorithm {} ({})...'.format(method, device))
