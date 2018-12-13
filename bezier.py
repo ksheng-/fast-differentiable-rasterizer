@@ -100,7 +100,7 @@ class Bezier(torch.nn.Module):
             #  curve = a + steps * (b - a)
         return self.raster(curve)
     
-    def _raster_base(self, curve, sigma=1e-2):
+    def _raster_base(self, curve, sigma=5e-2):
         tic = time()
         
         x = curve[0]

@@ -125,7 +125,7 @@ if args.display:
     #  sns.set_palette('Reds')
 #    sns.heatmap(curve_, cmap='Greys',cbar = False,xticklabels=False, yticklabels=False)
     frame1 = plt.gca()
-    frame1.matshow(curve_,cmap='Greys')
+    frame1.matshow(curve_,cmap='BuPu')
     frame1.axes.get_xaxis().set_visible(False)
     frame1.axes.get_yaxis().set_visible(False)
     plt.show()
