@@ -18,6 +18,11 @@ GCP n1-standard-8 (2.2 GHz / 8 core Broadwell, 30GB RAM) instance with Tesla V10
 PyTorch 1.0.0 running with Python 3.7, CUDA 9.0, cuDNN 7.1
 res=512, steps=128
 
+## Algorithm:
+* Sample parametric curve at fixed number of points (doing this recursively until we have each pixel is similar to de Castlejau, but we're approximately for efficiency. Its worth noting that points will "bunch up" at tighter points on this curve.
+* At this point, we could use Bresenham style techniques / other line drawing primitives to connect these points with straight lines (or even horizontal/vertical lines if we have enough points).
+* However, thats an inherently sequential and discrete algorithm that works on a pixel by pixel basis. Instead we're going to draw a bivariate Gaussian at each point and superimpose them to get our differentiable raster. 
+
 
 ### Test 1: ms/iter, quadratic curve (100 passes)
 python bezier.py --passes 100 --method <method> [--disable-cuda]
