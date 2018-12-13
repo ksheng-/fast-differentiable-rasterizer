@@ -399,7 +399,7 @@ class Bezier(torch.nn.Module):
         return torch.transpose(torch.squeeze(raster), 0, 1)
 
 
-    def _raster_shrunk(self, curve, sigma=1e-2):
+    def _raster_shrunk(self, curve, sigma=5e-3):
         tic = time()
         
         x = curve[0]
@@ -465,6 +465,7 @@ class Bezier(torch.nn.Module):
             raster[x:x+w, y:y+w] += raster_[:,:,t]
         # raster = torch.mean(self.r, dim=2)
         
+        raster = torch.min(raster, torch.Tensor([1]).to(self.device))
         #  for xmin, xmax, ymin, ymax in segments:
             #  w = xmax-xmin
             #  h = ymax-ymin

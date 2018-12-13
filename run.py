@@ -72,7 +72,7 @@ elif args.draw == 'composite':
         ],
     ]
 elif args.draw == 'char':
-    A = pickle.load(open("./fonts/bez_Arial.ttf","rb"))
+    A = pickle.load(open("./fonts/arial.quadratic","rb"))
     B = 0 #letter chooser
     C = 1.5 #scaling
     D = np.max(A[B])
