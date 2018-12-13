@@ -52,8 +52,6 @@ elif args.draw == 'cubic':
     ]]
 
 elif args.draw == 'composite':
-    from fontTools.ttLib import TTFont
-    font = TTFont('fonts/apache/roboto/Roboto-Regular.ttf')
     control_points_l = [
         [
             [0.1, 0.1],
@@ -121,10 +119,13 @@ print('memusage:  {:5d} MB allocated, {:5d} MB cached.'
 curve_ = curve.data.cpu().numpy()
 
 if args.display:
-    sns.set()
-    sns.set_style('white')
+#    plt.plot(curve_)
+#    sns.set()
+#    sns.set_style('white')
     #  sns.set_palette('Reds')
-    #  sns.heatmap(curve_, cmap='Greys', vmin=0, vmax=1)
-    sns.heatmap(curve_, cmap='Greys')
-    #  plt.matshow(curve_)
+#    sns.heatmap(curve_, cmap='Greys',cbar = False,xticklabels=False, yticklabels=False)
+    frame1 = plt.gca()
+    frame1.matshow(curve_,cmap='Greys')
+    frame1.axes.get_xaxis().set_visible(False)
+    frame1.axes.get_yaxis().set_visible(False)
     plt.show()

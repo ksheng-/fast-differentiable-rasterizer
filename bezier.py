@@ -403,7 +403,6 @@ class Bezier(torch.nn.Module):
 
         return torch.transpose(torch.squeeze(raster), 0, 1)
 
-
     def _raster_shrunk(self, curve, sigma=1e-2):
         tic = time()
         
