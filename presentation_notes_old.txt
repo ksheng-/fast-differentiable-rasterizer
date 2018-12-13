@@ -1,3 +1,8 @@
+dk:
+    bezier curves
+    linear interpolation
+    motivation
+
 ks
     cuda
     one curve does not stress hardware that much, can easily render whole canvas pixel by pixel
@@ -30,4 +35,5 @@ ks
             we also do an initial pass to collect the points that (together with its normal dist) cross the boundary of the tile
                 this way, we can ignore the tiles that do not contain any points
                 and each operation in the tile results in a tile_size * tile_size * points_in_tile operation instead of the original res * res * total_points
+
 
