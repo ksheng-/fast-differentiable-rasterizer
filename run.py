@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
+import pickle
 from torch.autograd import Variable
 from torch.multiprocessing import Pool
 from time import time
@@ -29,9 +30,10 @@ parser.add_argument('--passes', default=1, type=int, help='')
 args = parser.parse_args()
 
 use_cuda = not args.disable_cuda and torch.cuda.is_available()
+# Make all tensors cuda tensors
+#  torch.set_default_tensor_type(torch.cuda.FloatTensor if use_cuda else torch.FloatTensor)
 device = torch.device("cuda" if use_cuda else "cpu")
 print('Using device "{}"'.format(device))
-#  torch.set_default_tensor_type(torch.cuda.HalfTensor if use_cuda else torch.FloatTensor)
 
 net = Bezier(res=args.res, steps=args.steps, method=args.method, device=device, debug=args.debug)
 
@@ -49,28 +51,7 @@ elif args.draw == 'cubic':
         [0.0, 1.0]
     ]]
 
-elif args.draw == 'char':
-    #  <point x="166" y="1456" type="line"/>
-    #  <point x="166" y="0" type="line"/>
-    #  <point x="374" y="0" type="line"/>
-    #  <point x="374" y="1289" type="line"/>
-    #  <point x="650" y="1289" type="line" smooth="yes"/>
-    #  <point x="868" y="1289"/>
-    #  <point x="956" y="1180"/>
-    #  <point x="956" y="1017" type="curve" smooth="yes"/>
-    #  <point x="956" y="869"/>
-    #  <point x="854" y="753"/>
-    #  <point x="651" y="753" type="curve" smooth="yes"/>
-    #  <point x="327" y="753" type="line"/>
-    #  <point x="329" y="587" type="line"/>
-    #  <point x="770" y="587" type="line"/>
-    #  <point x="827" y="609" type="line"/>
-    #  <point x="1039" y="666"/>
-    #  <point x="1164" y="818"/>
-    #  <point x="1164" y="1017" type="curve" smooth="yes"/>
-    #  <point x="1164" y="1303"/>
-    #  <point x="983" y="1456"/>
-    #  <point x="650" y="1456" type="curve" smooth="yes"/>
+elif args.draw == 'composite':
     from fontTools.ttLib import TTFont
     font = TTFont('fonts/apache/roboto/Roboto-Regular.ttf')
     control_points_l = [
@@ -90,6 +71,18 @@ elif args.draw == 'char':
             [0.9, 0.1]
         ],
     ]
+elif args.draw == 'char':
+    A = pickle.load(open("./fonts/bez_Arial.ttf","rb"))
+    B = 0 #letter chooser
+    C = 1.5 #scaling
+    D = np.max(A[B])
+    control_points_l = np.zeros((len(A[B][0]),len(A[B]),2))
+    k = -1
+    for i in A[B]:
+        k += 1
+        for j in range(len(i)):
+            control_points_l[j][k][0] = A[B][k][j][0]/C/D+(C-1)/C/2
+            control_points_l[j][k][1] = 1-(A[B][k][j][1]/C/D+(C-1)/C/2)
 if args.batch:
     control_points_l = control_points_l * args.batch
 
@@ -139,7 +132,7 @@ curve_ = curve.data.cpu().numpy()
 if args.display:
     sns.set()
     sns.set_style('white')
-    sns.set_palette('Blues')
-    sns.heatmap(curve_)
+    #  sns.set_palette('Reds')
+    sns.heatmap(curve_, cmap='Greys')
     #  plt.matshow(curve_)
     plt.show()
