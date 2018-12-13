@@ -36,8 +36,8 @@ class Bezier(torch.nn.Module):
         elif method == 'tiled':
             # break in to NxN tiles
             self.tiles = 4
-            self.tiles_t = torch.Tensor([self.tiles]).long()
-            self.chunksize = self.res // self.tiles
+            self.tiles_t = torch.Tensor([self.tiles]).long().to(device)
+            self.chunksize = (self.res // self.tiles)
 
             #  print(self.c)
             #  self.c = self.c.reshape(-1, self.chunksize, self.chunksize, self.steps)
@@ -90,7 +90,7 @@ class Bezier(torch.nn.Module):
         b = self.lerp2d(control_points[1], control_points[2], steps)
         return a + steps * (b - a)
 
-    def get_curve(self, control_points, steps):
+    def sample_curve(self, control_points, steps):
         if control_points.size()[0] == 3:
             curve = self.quadratic_interp(control_points[:3], steps)
         if control_points.size()[0] == 4:
@@ -102,7 +102,7 @@ class Bezier(torch.nn.Module):
     def forward(self, curves):
         # NCHW
         steps = torch.linspace(0, 1, self.steps)
-        curve = torch.cat([self.get_curve(c, steps) for c in curves], dim=1)
+        curve = torch.cat([self.sample_curve(c, steps) for c in curves], dim=1)
         #  if curves.size()[1] == 3:
             #  curve = torch.cat([self.quadratic_interp(control_points[:3], steps) for c in curves]
         #  if curves.size()[1] == 4:
@@ -110,7 +110,6 @@ class Bezier(torch.nn.Module):
             #  b = self.quadratic_interp(control_points[1:4], steps)
             #  curve = a + steps * (b - a)
         return self.raster(curve)
-
     
     def _raster_base(self, curve, sigma=1e-2):
         tic = time()
@@ -128,7 +127,9 @@ class Bezier(torch.nn.Module):
             print(time() - tic)
         
         raster = torch.exp((-(x_ - c)**2 - (y_ - d)**2) / (2*sigma**2))
-        raster = torch.mean(raster, dim=2)
+        #  raster = torch.mean(raster, dim=2)
+        raster = torch.min(torch.sum(raster, dim=2), torch.Tensor([1]).to(self.device))
+        #  raster = torch.max(raster, dim=2)[0]
         if self.debug:
             print(time() - tic)
         
@@ -240,16 +241,39 @@ class Bezier(torch.nn.Module):
         x_px, y_px = curve_px[0], curve_px[1]
         curve_tile = torch.min((curve_px / self.chunksize), self.tiles_t-1)
         x_tile, y_tile = curve_tile[0], curve_tile[1]
-        tiles = self.tiles * y_tile + x_tile
-        right_tiles = tiles[(x_tile < self.tiles - 1) & (x_px + bound >= (x_tile + 1) * self.chunksize)] + 1
-        left_tiles = tiles[(x_tile > 0) & (x_px - bound < x_tile * self.chunksize)] - 1
-        top_tiles = tiles[(y_tile < self.tiles - 1) & (y_px + bound >= (y_tile + 1) * self.chunksize)] + self.tiles
-        bottom_tiles = tiles[(y_tile > 0) & (y_px - bound < y_tile * self.chunksize)] - self.tiles
+
+        tiles = torch.zeros([self.steps, self.steps]).cuda()
+        steps_ = torch.eye(steps).float()
+
+        center_tiles = (self.tiles * y_tile + x_tile).long()
+        right_tiles = center_tiles + ((x_tile < self.tiles - 1) & (x_px + bound >= (x_tile + 1) * self.chunksize)).long()
+        left_tiles = center_tiles - ((x_tile > 0) & (x_px - bound < x_tile * self.chunksize)).long()
+        bottom_tiles = center_tiles + ((y_tile < self.tiles - 1) & (y_px + bound >= (y_tile + 1) * self.chunksize)).long() * self.tiles
+        top_tiles = center_tiles - ((y_tile > 0) & (y_px - bound < y_tile * self.chunksize)).long() * self.tiles
+        
+        # the index is a 1d tensors of length steps containing the index of the tile the step falls into
+        tiles = tiles.index_add_(0, center_tiles, steps_)
+        tiles = tiles.index_add_(0, right_tiles, steps_)
+        tiles = tiles.index_add_(0, left_tiles, steps_)
+        tiles = tiles.index_add_(0, bottom_tiles, steps_)
+        tiles = tiles.index_add_(0, top_tiles, steps_)
+
+        # these are arrays of length steps that define another tile that the point at that step overlaps into 
+        #  right_tiles = tiles + ((x_tile < self.tiles - 1) & (x_px + bound >= (x_tile + 1) * self.chunksize)).long()
+        #  left_tiles = tiles - ((x_tile > 0) & (x_px - bound < x_tile * self.chunksize)).long()
+        #  bottom_tiles = tiles + ((y_tile < self.tiles - 1) & (y_px + bound >= (y_tile + 1) * self.chunksize)).long() * self.tiles
+        #  top_tiles = tiles - ((y_tile > 0) & (y_px - bound < y_tile * self.chunksize)).long() * self.tiles
+        #  br = tiles + ((x3_tile < self.tiles - 1) & (x_px + bound >= (x_tile + 1) * self.chunksize)).long() + ((y_tile < self.tiles - 1) & (y_px + bound >= (y_tile + 1) * self.chunksize)).long() * self.tiles
+        #  x_tile_boundaries = torch.arange(self.tiles).repeat(self.tiles, 0)
+
         #  tiles = self.tiles * y_tile + x_tile - 1
         #  tiles = self.tiles * y_tile + x_tile - 1
         #  tiles = self.tiles * y_tile + x_tile + 1
         #  tiles = self.tiles * y_tile + x_tile + 1
 
+        if self.debug:
+            torch.cuda.synchronize()
+            print('tiles {}'.format(time() - tic))
         #  for i, (x, y) in enumerate(torch.t(curve)):
             #  xp = int(x * self.res)
             #  yp = int(y * self.res)
@@ -264,10 +288,17 @@ class Bezier(torch.nn.Module):
                 #  tiles[self.tiles * yt + self.tiles + xt].append(i)
             #  if yt > 0 and yp - bound < yt * self.chunksize:
                 #  tiles[self.tiles * yt - self.tiles + xt].append(i)
+        #  tile = 0     
+        #  steps_in_tile = ((tiles == tile) | (right_tiles == tile) | (left_tiles == tile) | (top_tiles == tile) | (bottom_tiles == tile) | (br == tile)).nonzero().reshape(-1)
+
         for tile, stream in enumerate(self.streams):
-            steps_in_tile = (tiles == tile).nonzero().reshape(-1)
+            #  with torch.cuda.stream(stream):
+            steps_in_tile = tiles[tile].nonzero().reshape(-1) 
+            if self.debug:
+                #  torch.cuda.synchronize()
+                print('steps in tile {}'.format(time() - tic))
+            #  steps_in_tile = ((tiles == tile) | (right_tiles == tile) | (left_tiles == tile) | (top_tiles == tile) | (bottom_tiles == tile) | (br == tile)).nonzero().reshape(-1)
             if steps_in_tile.size()[0] > 0:
-                with torch.cuda.stream(stream):
                     y_tile, x_tile = divmod(tile, self.tiles)
                     x_idx = self.chunksize * x_tile
                     y_idx = self.chunksize * y_tile
@@ -276,10 +307,15 @@ class Bezier(torch.nn.Module):
                     ci = c[x_idx:x_idx+self.chunksize, y_idx:y_idx+self.chunksize, steps_in_tile]
                     di = d[x_idx:x_idx+self.chunksize, y_idx:y_idx+self.chunksize, steps_in_tile]
                     raster_ = torch.exp((-(xi - ci)**2 - (yi - di)**2) / (2*sigma**2))
-                    raster_ = torch.mean(raster_, dim=2)
+                    raster_ = torch.sum(raster_, dim=2)
                     raster[x_idx:x_idx+self.chunksize, y_idx:y_idx+self.chunksize] = raster_
-        torch.cuda.synchronize()
 
+            if self.debug:
+                #  torch.cuda.synchronize()
+                print('send off {}'.format(time() - tic))
+        raster = torch.min(raster, torch.Tensor([1]).half().to(self.device))
+
+        #  raster = torch.min(raster, torch.Tensor([1]).to(self.device).half())
         #  torch.multiprocessing.set_start_method('spawn')
         #  pool = Pool(N**2)
         #  pool.map(stream_fn, range(N**2))
@@ -467,7 +503,7 @@ if __name__ == '__main__':
     use_cuda = not args.disable_cuda and torch.cuda.is_available()
     device = torch.device("cuda" if use_cuda else "cpu")
     print('Using device "{}"'.format(device))
-    #  torch.set_default_tensor_type(torch.cuda.HalfTensor if use_cuda else torch.FloatTensor)
+    #  torch.set_default_tensor_type(torch.cuda.FloatTensor if use_cuda else torch.FloatTensor)
 
     net = Bezier(res=args.res, steps=args.steps, method=args.method, device=device)
 
