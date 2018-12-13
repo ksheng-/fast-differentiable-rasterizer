@@ -1,49 +1,14 @@
-dk:
-    bezier curves
-    linear interpolation
-    motivation
-
-ks
-    cuda
-    one curve does not stress hardware that much, can easily render whole canvas pixel by pixel
-    few cuda kernel launches
-    certain operations can be slow do to unoptimized memory/cache access patterns
-
-    description:
-        naive
-        naive w/ cuda - massively increase performance, slightly increased if lerps are done on cpu
-
-        These three basically do minimal cpu processing, sending a giant tensor to cuda, launches a few kernels
-        and return
-
-        shrunk is the opposite end of the spectrum, each point gets sent separately and the gradient is calculated in a square around each point. This destroys performance since so much time is spent launching CUDA kernels for relatively cheap operations.
-
-        in order to increase performance, we can simply send less pixels, resulting in fewer FLOPs
-        to start, we find the minimum and maximum of the curve to draw a bounding box, only send that to the gpu, and insert it back in.
-            this actually decreases performance because, again, the GPU is more than capable of rendering the whole thing, and the additional indexing and processing can be expensive.
-        also tried drawing a tight bounding box by rotating the curve so the points align.
-            the multiplies and translations required hurt more than help
-
-
-        HalfTensors (float16) further increases performance, broadcasting replacing expand() also increases performace
-            expand tends to have very poor at certain tensor sizes due to cache access patterns
-        
-        in order to furthur improve resource usage, we introduced the 'tiled' method
-            the full area is broken into N*N square tiles
-            each of these can be evaluated asynchronously using CUDA streams (the V100 has 80 effective streaming multiprocessors, and we can enqueue our elementwise multiplies on this to execute in order but overlapped
-                launch each kernel, execute, wait for sync
-            we also do an initial pass to collect the points that (together with its normal dist) cross the boundary of the tile
-                this way, we can ignore the tiles that do not contain any points
-                and each operation in the tile results in a tile_size * tile_size * points_in_tile operation instead of the original res * res * total_points
-
 FINAL
+Slide 1 [title]: 
+		Our goal is to build a fast differentiable rasterizer for quadratic and cubic bezier curves. Before we talk about why we need this and how we did this, I will explain what a bezier curve is and what rasterization is.
+	
+Slide 2 (bezier intro):
+		Bezier curves are vector curves that are defined by a set of ordered points called control points. For example, the curve on the board is a quadratic bezier curve that is defined by three points and the process of converting three points into a curve displayed on a finite resolution is rasterization.
+Our project is building a rasterizer for these curves that can carry gradient information. The ability to carry gradient information, or having the differentiable operation is a tool that can be used in any gradient based methods including deep neural networks which have been shown to be powerful.	
+		Going back to how the curve can be drawn from points, straight lines are drawn between consecutive points, and the bezier curve is drawn by taking a linear combination of two lines. (ON THE BOARD DO THIS). In order to do this for monitors that contain discrete pixels, we divide the curve into small points and compute the location of each point. The points are close enough to each other so that when we project them together on the monitor, it looks like a curve.
+	Here are some more examples of our rasterization. We have a cubic bezier cuve, and we have a letter a from arial font donated from karol's group.
 
-Slide 1 [title]
-Fast differentiable bezier curve rasterizer
-
-[explain curves on board]
 What is a bezier curve? Vector curve defined by control points.
-
 What is rasterization? In order to render the curve onto a display with a finite resolution, pixels that fall on the curve must be determined. 
 Font glyphs - TrueType fonts are defined as a combination of quadratic bezier curves (with 3 control points each)
 Tons of different algorithms are part of every modern graphics pipeline.
