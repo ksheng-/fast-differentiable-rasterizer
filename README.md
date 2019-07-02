@@ -1,7 +1,8 @@
 # fast-differentiable-rasterizer
 
-### Resources
-http://developer.download.nvidia.com/devzone/devcenter/gamegraphics/files/opengl/gpupathrender.pdf
+### Background
+[pathfinder](https://pcwalton.github.io/2017/02/14/pathfinder.html)<br>
+[NV_path_rendering](http://developer.download.nvidia.com/devzone/devcenter/gamegraphics/files/opengl/gpupathrender.pdf)
 
 ### Preliminary performance testing
 
